@@ -93,9 +93,34 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 onPressed: _showBookmarks),
           ],
         ),
-        body: PdfViewPinch(
-          controller: _controller!,
-          onPageChanged: (page) => setState(() => _currentPage = page),
+        body: Stack(
+          children: [
+            PdfViewPinch(
+              controller: _controller!,
+              onPageChanged: (page) => setState(() => _currentPage = page),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: PdfPageNumber(
+                    controller: _controller!,
+                    builder: (context, loadingState, page, pagesCount) => Text(
+                      pagesCount == null ? '' : '$page/$pagesCount',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: _addBookmark,
