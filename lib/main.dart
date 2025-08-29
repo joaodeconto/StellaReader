@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'ui/library_screen.dart';
 import 'ui/reader_screen.dart';
 import 'domain/book.dart';
+import 'ui/gutenberg_screen.dart';
 
 void main() => runApp(const ProviderScope(child: App()));
 
@@ -24,6 +25,10 @@ class App extends ConsumerWidget {
                 final book = state.extra as Book;
                 return ReaderScreen(book: book);
               },
+            ),
+            GoRoute(
+              path: 'gutenberg',
+              builder: (_, __) => const GutenbergScreen(),
             ),
           ],
         ),

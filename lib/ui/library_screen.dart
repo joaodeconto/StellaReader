@@ -48,6 +48,11 @@ class LibraryScreen extends ConsumerWidget {
         title: const Text('Biblioteca'),
         actions: [
           IconButton(
+            tooltip: 'Explorar Gutenberg',
+            icon: const Icon(Icons.public),
+            onPressed: () => context.push('/gutenberg'),
+          ),
+          IconButton(
             tooltip: 'Baixar por URL',
             icon: const Icon(Icons.download),
             onPressed: () => _promptDownload(context, ref),
