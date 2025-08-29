@@ -22,4 +22,14 @@ class BookRepository {
     final db = await AppDb.instance;
     await db.update('books', {'lastCfi': cfi}, where: 'id=?', whereArgs: [bookId]);
   }
+
+  Future<void> updatePath(int bookId, String newPath) async {
+    final db = await AppDb.instance;
+    await db.update('books', {'path': newPath}, where: 'id=?', whereArgs: [bookId]);
+  }
+
+  Future<void> delete(int bookId) async {
+    final db = await AppDb.instance;
+    await db.delete('books', where: 'id=?', whereArgs: [bookId]);
+  }
 }

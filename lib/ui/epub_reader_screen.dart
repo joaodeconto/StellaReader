@@ -98,8 +98,35 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
             IconButton(icon: const Icon(Icons.bookmarks_outlined), onPressed: _showBookmarks),
           ],
         ),
-        body: EpubView(
-          controller: _controller,
+        body: Stack(
+          children: [
+            EpubView(
+              controller: _controller,
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: 16,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black54,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ValueListenableBuilder(
+                    valueListenable: _controller.currentValueListenable,
+                    builder: (context, value, _) => Text(
+                      (value?.chapter?.Title) ?? '…',
+                      style: const TextStyle(color: Colors.white),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: _addBookmark,

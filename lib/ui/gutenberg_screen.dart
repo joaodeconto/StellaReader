@@ -137,59 +137,66 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
     final dir = await getApplicationDocumentsDirectory();
     final filename = _sanitizeFileName('${g.title}.${format == 'pdf' ? 'pdf' : 'epub'}');
     final savePath = _uniquePath(io.File(p.join(dir.path, filename)));
-    double progress = 0;
     final cancelToken = CancelToken();
+    int received = 0;
+    int total = -1;
+    bool started = false;
     // ignore: use_build_context_synchronously
     await showDialog(
       barrierDismissible: false,
       // ignore: use_build_context_synchronously
       context: context,
-      builder: (c) {
-        () async {
-          try {
-            await Dio().download(url, savePath, cancelToken: cancelToken, onReceiveProgress: (r, t) {
-              if (t > 0) {
-                progress = r / t;
-                // ignore: invalid_use_of_protected_member
-                (c as Element).markNeedsBuild();
+      builder: (ctx) {
+        return StatefulBuilder(builder: (c, setState) {
+          if (!started) {
+            started = true;
+            () async {
+              try {
+                await Dio().download(url, savePath, cancelToken: cancelToken, onReceiveProgress: (r, t) {
+                  setState(() {
+                    received = r;
+                    total = t;
+                  });
+                });
+                if (format == 'pdf') {
+                  final doc = await PdfDocument.openFile(savePath);
+                  await doc.close();
+                } else {
+                  await EpubDocument.openFile(uni.File(savePath));
+                }
+                final id = await BookRepository().insert(Book(title: g.title, path: savePath, format: format));
+                if (!c.mounted) return;
+                Navigator.pop(c);
+                if (!context.mounted) return;
+                GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
+              } catch (e) {
+                if (!c.mounted) return;
+                Navigator.pop(c);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha no download: $e')));
+                try { await io.File(savePath).delete(); } catch (_) {}
               }
-            });
-            if (format == 'pdf') {
-              final doc = await PdfDocument.openFile(savePath);
-              await doc.close();
-            } else {
-              // quick check by opening EpubDocument (no close needed)
-              await EpubDocument.openFile(uni.File(savePath));
-            }
-            final id = await BookRepository().insert(Book(title: g.title, path: savePath, format: format));
-            if (!c.mounted) return;
-            Navigator.pop(c);
-            // ignore: use_build_context_synchronously
-            GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
-          } catch (e) {
-            if (!c.mounted) return;
-            Navigator.pop(c);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha no download: $e')));
-            try { await io.File(savePath).delete(); } catch (_) {}
+            }();
           }
-        }();
-        return AlertDialog(
-          title: const Text('Baixando...'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: progress == 0 ? null : progress),
-              const SizedBox(height: 8),
-              Text('${(progress * 100).toStringAsFixed(0)}%'),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => cancelToken.cancel('cancelado'),
-              child: const Text('Cancelar'),
+          final value = (total > 0) ? (received / total) : null;
+          final percent = (value == null) ? '—' : '${(value * 100).toStringAsFixed(0)}%';
+          return AlertDialog(
+            title: const Text('Baixando...'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(value: value),
+                const SizedBox(height: 8),
+                Text(percent),
+              ],
             ),
-          ],
-        );
+            actions: [
+              TextButton(
+                onPressed: () => cancelToken.cancel('cancelado'),
+                child: const Text('Cancelar'),
+              ),
+            ],
+          );
+        });
       },
     );
   }
