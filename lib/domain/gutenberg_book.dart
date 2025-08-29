@@ -4,6 +4,7 @@ class GutenbergBook {
   final String? author;
   final String? coverUrl;
   final String? pdfUrl;
+  final String? epubUrl;
 
   GutenbergBook({
     required this.id,
@@ -11,6 +12,7 @@ class GutenbergBook {
     this.author,
     this.coverUrl,
     this.pdfUrl,
+    this.epubUrl,
   });
 
   factory GutenbergBook.fromJson(Map<String, dynamic> j) {
@@ -22,13 +24,15 @@ class GutenbergBook {
     // Prefer explicit PDF link if available
     String? pdf;
     if (formats['application/pdf'] is String) pdf = formats['application/pdf'] as String;
+    String? epub;
+    if (formats['application/epub+zip'] is String) epub = formats['application/epub+zip'] as String;
     return GutenbergBook(
       id: j['id'] as int,
       title: (j['title'] as String?)?.trim() ?? 'Untitled',
       author: author,
       coverUrl: cover,
       pdfUrl: pdf,
+      epubUrl: epub,
     );
   }
 }
-

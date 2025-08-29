@@ -40,12 +40,15 @@ class ShareHandler {
     String? lastPath;
     for (final f in items) {
       final path = f.path; // resolved file path
-      var title = path.split('/').last;
-      if (title.toLowerCase().endsWith('.pdf')) {
-        title = title.substring(0, title.length - 4);
+      var fileName = path.split('/').last;
+      final lower = fileName.toLowerCase();
+      final isEpub = lower.endsWith('.epub');
+      if (lower.endsWith('.pdf') || isEpub) {
+        fileName = fileName.substring(0, fileName.lastIndexOf('.'));
       }
-      lastId = await BookRepository().insert(Book(title: title, path: path));
-      lastTitle = title;
+      final format = isEpub ? 'epub' : 'pdf';
+      lastId = await BookRepository().insert(Book(title: fileName, path: path, format: format));
+      lastTitle = fileName;
       lastPath = path;
     }
     if (lastId != null && context.mounted) {

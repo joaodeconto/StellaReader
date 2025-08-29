@@ -5,6 +5,8 @@ import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io' as io;
 import 'package:pdfx/pdfx.dart';
+import 'package:epub_view/epub_view.dart';
+import 'package:universal_file/universal_file.dart' as uni;
 import '../data/share_handler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/book_repository.dart';
@@ -69,7 +71,7 @@ class LibraryScreen extends ConsumerWidget {
                   final b = items[i];
                   return ListTile(
                     title: Text(b.title),
-                    subtitle: Text('Última página: ${b.lastPage}'),
+                    subtitle: Text(b.format == 'pdf' ? 'Última página: ${b.lastPage}' : 'Formato: EPUB'),
                     onTap: () => context.push('/reader', extra: b),
                   );
                 },
@@ -86,11 +88,13 @@ class LibraryScreen extends ConsumerWidget {
           if (res != null && res.files.single.path != null) {
             final path = res.files.single.path!;
             final title = p.basenameWithoutExtension(path);
-            final id = await BookRepository().insert(Book(title: title, path: path));
+            final ext = p.extension(path).toLowerCase();
+            final format = ext == '.epub' ? 'epub' : 'pdf';
+            final id = await BookRepository().insert(Book(title: title, path: path, format: format));
             // Recarrega lista
             ref.invalidate(booksProvider);
             // Abre direto
-            final book = Book(id: id, title: title, path: path);
+            final book = Book(id: id, title: title, path: path, format: format);
             // ignore: use_build_context_synchronously
             context.push('/reader', extra: book);
           }
@@ -124,11 +128,11 @@ Future<void> _promptDownload(BuildContext context, WidgetRef ref) async {
   await _startDownload(context, ref, url);
 }
 
-Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) async {
+  Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) async {
   try {
     final dir = await getApplicationDocumentsDirectory();
-    final filename = _suggestFileName(url);
-    final savePath = _uniquePath(io.File(p.join(dir.path, filename)));
+      final filename = _suggestFileName(url);
+      final savePath = _uniquePath(io.File(p.join(dir.path, filename)));
 
     double progress = 0;
     bool canceled = false;
@@ -153,16 +157,21 @@ Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) asy
                 }
               },
             );
-            // Validate PDF
-            final doc = await PdfDocument.openFile(savePath);
-            await doc.close();
-            final title = p.basenameWithoutExtension(savePath);
-            final id = await BookRepository().insert(Book(title: title, path: savePath));
+              // Validate and detect format
+              final format = filename.toLowerCase().endsWith('.epub') ? 'epub' : 'pdf';
+              if (format == 'pdf') {
+                final doc = await PdfDocument.openFile(savePath);
+                await doc.close();
+              } else {
+                await EpubDocument.openFile(uni.File(savePath));
+              }
+              final title = p.basenameWithoutExtension(savePath);
+              final id = await BookRepository().insert(Book(title: title, path: savePath, format: format));
             if (c.mounted) {
               Navigator.pop(c); // close progress
               // Navigate to reader
               // ignore: use_build_context_synchronously
-              GoRouter.of(context).push('/reader', extra: Book(id: id, title: title, path: savePath));
+                GoRouter.of(context).push('/reader', extra: Book(id: id, title: title, path: savePath, format: format));
               // Refresh list
               ref.invalidate(booksProvider);
             }

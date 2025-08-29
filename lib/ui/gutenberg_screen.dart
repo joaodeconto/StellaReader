@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' as m;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/gutendex_service.dart';
 import '../domain/gutenberg_book.dart';
@@ -10,6 +11,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import 'dart:io' as io;
 import 'package:pdfx/pdfx.dart';
+import 'package:epub_view/epub_view.dart';
+import 'package:universal_file/universal_file.dart' as uni;
 
 final _queryProvider = StateProvider<String>((_) => '');
 final _pageProvider = StateProvider<int>((_) => 1);
@@ -72,20 +75,28 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
             itemBuilder: (_, i) {
               final b = items[i];
               final hasPdf = b.pdfUrl != null && b.pdfUrl!.isNotEmpty;
+              final hasEpub = b.epubUrl != null && b.epubUrl!.isNotEmpty;
               return ListTile(
                 leading: b.coverUrl != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: Image.network(b.coverUrl!, width: 48, height: 48, fit: BoxFit.cover),
+                        child: m.Image.network(b.coverUrl!, width: 48, height: 48, fit: BoxFit.cover),
                       )
                     : const Icon(Icons.menu_book_outlined),
                 title: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
                 subtitle: Text(b.author ?? 'Autor desconhecido', maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: IconButton(
-                  tooltip: hasPdf ? 'Baixar PDF' : 'PDF indisponível',
-                  onPressed: hasPdf ? () => _downloadPdf(context, ref, b) : null,
-                  icon: const Icon(Icons.download),
-                ),
+                trailing: Wrap(spacing: 8, children: [
+                  IconButton(
+                    tooltip: hasPdf ? 'Baixar PDF' : 'PDF indisponível',
+                    onPressed: hasPdf ? () => _downloadFormat(context, ref, b, 'pdf') : null,
+                    icon: const Icon(Icons.picture_as_pdf),
+                  ),
+                  IconButton(
+                    tooltip: hasEpub ? 'Baixar EPUB' : 'EPUB indisponível',
+                    onPressed: hasEpub ? () => _downloadFormat(context, ref, b, 'epub') : null,
+                    icon: const Icon(Icons.book_outlined),
+                  ),
+                ]),
               );
             },
           );
@@ -121,10 +132,10 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
     );
   }
 
-  Future<void> _downloadPdf(BuildContext context, WidgetRef ref, GutenbergBook g) async {
-    final url = g.pdfUrl!;
+  Future<void> _downloadFormat(BuildContext context, WidgetRef ref, GutenbergBook g, String format) async {
+    final url = format == 'pdf' ? g.pdfUrl! : g.epubUrl!;
     final dir = await getApplicationDocumentsDirectory();
-    final filename = _sanitizeFileName('${g.title}.pdf');
+    final filename = _sanitizeFileName('${g.title}.${format == 'pdf' ? 'pdf' : 'epub'}');
     final savePath = _uniquePath(io.File(p.join(dir.path, filename)));
     double progress = 0;
     final cancelToken = CancelToken();
@@ -143,13 +154,18 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
                 (c as Element).markNeedsBuild();
               }
             });
-            final doc = await PdfDocument.openFile(savePath);
-            await doc.close();
-            final id = await BookRepository().insert(Book(title: g.title, path: savePath));
+            if (format == 'pdf') {
+              final doc = await PdfDocument.openFile(savePath);
+              await doc.close();
+            } else {
+              // quick check by opening EpubDocument (no close needed)
+              await EpubDocument.openFile(uni.File(savePath));
+            }
+            final id = await BookRepository().insert(Book(title: g.title, path: savePath, format: format));
             if (!c.mounted) return;
             Navigator.pop(c);
             // ignore: use_build_context_synchronously
-            GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath));
+            GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
           } catch (e) {
             if (!c.mounted) return;
             Navigator.pop(c);

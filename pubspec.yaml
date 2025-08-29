@@ -44,6 +44,8 @@ dependencies:
   receive_sharing_intent: any
   dio: any
   path: any
+  epub_view: any
+  universal_file: any
 
 dev_dependencies:
   flutter_test:

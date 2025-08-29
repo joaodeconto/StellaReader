@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'ui/library_screen.dart';
 import 'ui/reader_screen.dart';
+import 'ui/epub_reader_screen.dart';
 import 'domain/book.dart';
 import 'ui/gutenberg_screen.dart';
 
@@ -23,7 +24,9 @@ class App extends ConsumerWidget {
               path: 'reader',
               builder: (_, state) {
                 final book = state.extra as Book;
-                return ReaderScreen(book: book);
+                return book.format == 'epub'
+                    ? EpubReaderScreen(book: book)
+                    : ReaderScreen(book: book);
               },
             ),
             GoRoute(
