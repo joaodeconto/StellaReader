@@ -113,7 +113,9 @@ class LibraryScreen extends ConsumerWidget {
             // Abre direto
             final book = Book(id: id, title: title, path: path, format: format);
             // ignore: use_build_context_synchronously
-            context.push('/reader', extra: book);
+            await context.push('/reader', extra: book);
+            // refresh again after returning
+            ref.invalidate(booksProvider);
           }
         },
         child: const Icon(Icons.add),
@@ -190,7 +192,10 @@ Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) asy
                 if (!c.mounted) return;
                 Navigator.pop(c); // close progress
                 if (!context.mounted) return;
-                GoRouter.of(context).push('/reader', extra: Book(id: id, title: title, path: savePath, format: format));
+                final nav = GoRouter.of(context).push('/reader', extra: Book(id: id, title: title, path: savePath, format: format));
+                // update list while away, and once back
+                ref.invalidate(booksProvider);
+                await nav;
                 ref.invalidate(booksProvider);
               } catch (e) {
                 if (!c.mounted) return;
@@ -260,7 +265,9 @@ Future<void> _openBook(BuildContext context, WidgetRef ref, Book b) async {
   final exists = io.File(b.path).existsSync();
   if (exists) {
     // ignore: use_build_context_synchronously
-    GoRouter.of(context).push('/reader', extra: b);
+    final nav = GoRouter.of(context).push('/reader', extra: b);
+    await nav;
+    ref.invalidate(booksProvider);
     return;
   }
   final action = await showDialog<String>(

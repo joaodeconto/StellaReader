@@ -13,6 +13,7 @@ import 'dart:io' as io;
 import 'package:pdfx/pdfx.dart';
 import 'package:epub_view/epub_view.dart';
 import 'package:universal_file/universal_file.dart' as uni;
+import 'library_screen.dart' as lib;
 
 final _queryProvider = StateProvider<String>((_) => '');
 final _pageProvider = StateProvider<int>((_) => 1);
@@ -168,7 +169,10 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
                 if (!c.mounted) return;
                 Navigator.pop(c);
                 if (!context.mounted) return;
-                GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
+                final nav = GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
+                // Refresh library once back
+                await nav;
+                ref.invalidate(lib.booksProvider);
               } catch (e) {
                 if (!c.mounted) return;
                 Navigator.pop(c);

@@ -40,11 +40,12 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
     if (widget.book.id == null) return;
     final cfi = _controller.generateEpubCfi();
     if (cfi == null) return;
+    final label = _controller.currentValueListenable.value?.chapter?.Title;
     await BookmarkRepository().insert(Bookmark(
       bookId: widget.book.id!,
       page: 1,
       cfi: cfi,
-      label: null,
+      label: label,
       createdAt: DateTime.now().millisecondsSinceEpoch,
     ));
     if (!mounted) return;
@@ -66,12 +67,16 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
                 .map(
                   (bm) => ListTile(
                     leading: const Icon(Icons.bookmark),
-                    title: Text(bm.cfi != null ? 'Localização' : 'Marcador'),
+                    title: Text(bm.label ?? 'Localização'),
                     onTap: () {
-                      if (bm.cfi != null) {
-                        _controller.gotoEpubCfi(bm.cfi!);
-                      }
+                      final cfi = bm.cfi;
                       Navigator.pop(context);
+                      if (cfi != null) {
+                        // jump after sheet closes
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _controller.gotoEpubCfi(cfi);
+                        });
+                      }
                     },
                   ),
                 )
