@@ -45,6 +45,7 @@ dependencies:
   dio: any
   path: any
   epub_view: any
+  flutter_html: any
   universal_file: any
   url_launcher: any
 
