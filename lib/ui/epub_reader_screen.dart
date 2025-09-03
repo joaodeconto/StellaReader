@@ -4,7 +4,7 @@ import 'package:epub_view/epub_view.dart';
 import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/book.dart';
 import '../data/book_repository.dart';
@@ -29,8 +29,6 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   /// Ensures we only jump to the stored CFI once.
   bool _didInitialCfiJump = false;
-  late VoidCallback _loadingListener;
-  Timer? _saveDebounce;
 
   /// Listener reference so we can clean it up on dispose.
   late VoidCallback _loadingListener;
@@ -162,7 +160,9 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   Widget build(BuildContext context) {
     return PopScope(
       // Ensure we save the last position when leaving the screen.
-      onPopInvoked: (didPop) => _saveLastLocation(),
+      onPopInvokedWithResult: (didPop, result) {
+        _saveLastLocation();
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.book.title),
