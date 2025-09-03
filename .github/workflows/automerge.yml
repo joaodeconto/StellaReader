@@ -1,0 +1,33 @@
+name: Auto-merge Codex PRs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  enable-automerge:
+    # Filtra por autor e/ou nome da branch do bot
+    if: >
+      github.event.pull_request.user.login == 'codex' ||
+      github.event.pull_request.user.login == 'codex[bot]' ||
+      startsWith(github.event.pull_request.head.ref, 'codex/')
+    runs-on: ubuntu-latest
+    steps:
+      # Opcional: exigir que NÃO seja rascunho
+      - name: Fail if draft
+        if: ${{ github.event.pull_request.draft }}
+        run: |
+          echo "PR ainda é draft. Saindo."
+          exit 1
+
+      # Habilita o Auto-merge nativo do GitHub
+      - name: Enable auto-merge (squash)
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          pull-request-number: ${{ github.event.pull_request.number }}
+          merge-method: squash

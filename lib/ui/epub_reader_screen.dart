@@ -5,7 +5,6 @@ import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../domain/book.dart';
 import '../data/book_repository.dart';
@@ -30,6 +29,8 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   /// Ensures we only jump to the stored CFI once.
   bool _didInitialCfiJump = false;
+  late VoidCallback _loadingListener;
+  Timer? _saveDebounce;
 
   /// Listener reference so we can clean it up on dispose.
   late VoidCallback _loadingListener;
@@ -222,7 +223,6 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     final toc = _flattenTocSafe();
     final idx = toc.indexWhere((t) => normTitle(t) == normTitle(raw));
     debugPrint('Current chapter: raw="$raw" cleaned="$cleaned" index=$idx');
-
     final prefix = idx >= 0 ? 'Capítulo ${idx + 1} — ' : '';
     final text = cleaned.isEmpty
         ? (prefix.isNotEmpty ? prefix.substring(0, prefix.length - 3) : null)
@@ -255,5 +255,4 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
       return const [];
     }
   }
-
 }
