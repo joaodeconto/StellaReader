@@ -46,6 +46,7 @@ dependencies:
   path: any
   epub_view: any
   universal_file: any
+  url_launcher: any
 
 dev_dependencies:
   flutter_test:
