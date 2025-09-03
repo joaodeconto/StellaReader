@@ -1,5 +1,6 @@
 /// Normalizes a string by collapsing whitespace and lowercasing.
-String normTitle(String s) => s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+String normTitle(String s) =>
+    s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
 
 /// Cleans common noisy prefixes from chapter titles found in public EPUBs.
 ///
@@ -38,4 +39,3 @@ int chapterIndex(String rawTitle, List<String> toc) {
 
   return -1;
 }
-

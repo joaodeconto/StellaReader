@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:epub_view/epub_view.dart';
+import 'package:epub_view/epub_view.dart' hide Image;
 import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,7 +76,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   void _onLocationChanged() {
     debugPrint('Location changed');
     _saveDebounce?.cancel();
-    _saveDebounce = Timer(const Duration(milliseconds: 600), _saveLastLocation);
+    _saveDebounce = Timer(
+      const Duration(milliseconds: 2000),
+      _saveLastLocation,
+    );
   }
 
   @override
@@ -239,7 +242,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     EpubViewBuilders builders,
     EpubBook document,
     List<EpubChapter> chapters,
-    List<Paragraph> paragraphs,
+    List paragraphs,
     int index,
     int chapterIndex,
     int paragraphIndex,
@@ -258,7 +261,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
           builders.chapterDividerBuilder(chapters[chapterIndex]),
         Html(
           data: paragraphs[index].element.outerHtml,
-          onLinkTap: (href, _, __) => onExternalLinkPressed(href!),
+          onLinkTap: (href, _, _) => onExternalLinkPressed(href!),
           style: {
             'html': Style(
               padding: HtmlPaddings.only(
@@ -273,14 +276,14 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
             TagExtension(
               tagsToExtend: {"img"},
               builder: (imageContext) {
-                final url =
-                    imageContext.attributes['src']!.replaceAll('../', '');
-                final content = Uint8List.fromList(
-                    document.Content!.Images![url]!.Content!);
-                return Image.memory(
-                  content,
-                  filterQuality: FilterQuality.low,
+                final url = imageContext.attributes['src']!.replaceAll(
+                  '../',
+                  '',
                 );
+                final content = Uint8List.fromList(
+                  document.Content!.Images![url]!.Content!,
+                );
+                return Image.memory(content, filterQuality: FilterQuality.low);
               },
             ),
           ],
