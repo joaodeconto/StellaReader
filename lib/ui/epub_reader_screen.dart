@@ -50,8 +50,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   void _onLocationChanged() {
     _saveDebounce?.cancel();
-    _saveDebounce =
-        Timer(const Duration(milliseconds: 600), _saveLastLocation);
+    _saveDebounce = Timer(const Duration(milliseconds: 600), _saveLastLocation);
   }
 
   @override
@@ -74,18 +73,20 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     if (cfi == null) return;
 
     final label = _currentChapterLabel() ?? 'Localização';
-    await BookmarkRepository().insert(Bookmark(
-      bookId: widget.book.id!,
-      page: 0,
-      cfi: cfi,
-      label: label,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await BookmarkRepository().insert(
+      Bookmark(
+        bookId: widget.book.id!,
+        page: 0,
+        cfi: cfi,
+        label: label,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Marcador adicionado')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Marcador adicionado')));
   }
 
   Future<void> _showBookmarks() async {
@@ -98,23 +99,23 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
         children: items.isEmpty
             ? [const ListTile(title: Text('Sem marcadores'))]
             : items
-                .map(
-                  (bm) => ListTile(
-                    leading: const Icon(Icons.bookmark),
-                    title: Text(bm.label ?? 'Localização'),
-                    onTap: () {
-                      final cfi = bm.cfi;
-                      Navigator.pop(context);
-                      if (cfi != null) {
-                        // jump after sheet closes
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          _controller.gotoEpubCfi(cfi);
-                        });
-                      }
-                    },
-                  ),
-                )
-                .toList(),
+                  .map(
+                    (bm) => ListTile(
+                      leading: const Icon(Icons.bookmark),
+                      title: Text(bm.label ?? 'Localização'),
+                      onTap: () {
+                        final cfi = bm.cfi;
+                        Navigator.pop(context);
+                        if (cfi != null) {
+                          // jump after sheet closes
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _controller.gotoEpubCfi(cfi);
+                          });
+                        }
+                      },
+                    ),
+                  )
+                  .toList(),
       ),
     );
   }
@@ -133,12 +134,17 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      onPopInvoked: (didPop) => _saveLastLocation(),
+      onPopInvokedWithResult: (didPop, result) {
+        _saveLastLocation();
+      },
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.book.title),
           actions: [
-            IconButton(icon: const Icon(Icons.bookmarks_outlined), onPressed: _showBookmarks),
+            IconButton(
+              icon: const Icon(Icons.bookmarks_outlined),
+              onPressed: _showBookmarks,
+            ),
           ],
         ),
         body: Stack(
@@ -158,7 +164,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
               bottom: 16,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(12),
@@ -236,9 +245,9 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
         lowered.startsWith('chapter ') ||
         lowered.startsWith('capítulo ')) {
       r = r.replaceFirst(
-          RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*',
-              caseSensitive: false),
-          '');
+        RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*', caseSensitive: false),
+        '',
+      );
       if (r.toLowerCase().contains('project gutenberg')) return '';
     }
     return r.trim();

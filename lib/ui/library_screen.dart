@@ -64,15 +64,21 @@ class LibraryScreen extends ConsumerWidget {
       ),
       body: books.when(
         data: (items) => items.isEmpty
-            ? const Center(child: Text('Nenhum livro. Toque em + para importar.'))
+            ? const Center(
+                child: Text('Nenhum livro. Toque em + para importar.'),
+              )
             : ListView.separated(
                 itemCount: items.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
+                separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (_, i) {
                   final b = items[i];
                   return ListTile(
                     title: Text(b.title),
-                    subtitle: Text(b.format == 'pdf' ? 'Última página: ${b.lastPage}' : 'Formato: EPUB'),
+                    subtitle: Text(
+                      b.format == 'pdf'
+                          ? 'Última página: ${b.lastPage}'
+                          : 'Formato: EPUB',
+                    ),
                     onTap: () => _openBook(context, ref, b),
                     trailing: PopupMenuButton<String>(
                       onSelected: (v) {
@@ -86,8 +92,14 @@ class LibraryScreen extends ConsumerWidget {
                         }
                       },
                       itemBuilder: (c) => const [
-                        PopupMenuItem(value: 'relink', child: Text('Corrigir caminho…')),
-                        PopupMenuItem(value: 'delete', child: Text('Remover da biblioteca')),
+                        PopupMenuItem(
+                          value: 'relink',
+                          child: Text('Corrigir caminho…'),
+                        ),
+                        PopupMenuItem(
+                          value: 'delete',
+                          child: Text('Remover da biblioteca'),
+                        ),
                       ],
                     ),
                   );
@@ -107,7 +119,9 @@ class LibraryScreen extends ConsumerWidget {
             final title = p.basenameWithoutExtension(path);
             final ext = p.extension(path).toLowerCase();
             final format = ext == '.epub' ? 'epub' : 'pdf';
-            final id = await BookRepository().insert(Book(title: title, path: path, format: format));
+            final id = await BookRepository().insert(
+              Book(title: title, path: path, format: format),
+            );
             // Recarrega lista
             ref.invalidate(booksProvider);
             // Abre direto
@@ -122,7 +136,7 @@ class LibraryScreen extends ConsumerWidget {
       ),
     );
   }
-  }
+}
 
 Future<void> _promptDownload(BuildContext context, WidgetRef ref) async {
   final ctrl = TextEditingController();
@@ -137,8 +151,14 @@ Future<void> _promptDownload(BuildContext context, WidgetRef ref) async {
         autofocus: true,
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
-        FilledButton(onPressed: () => Navigator.pop(c, ctrl.text.trim()), child: const Text('Baixar')),
+        TextButton(
+          onPressed: () => Navigator.pop(c),
+          child: const Text('Cancelar'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(c, ctrl.text.trim()),
+          child: const Text('Baixar'),
+        ),
       ],
     ),
   );
@@ -147,7 +167,11 @@ Future<void> _promptDownload(BuildContext context, WidgetRef ref) async {
   await _startDownload(context, ref, url);
 }
 
-Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) async {
+Future<void> _startDownload(
+  BuildContext context,
+  WidgetRef ref,
+  String url,
+) async {
   try {
     final dir = await getApplicationDocumentsDirectory();
     final filename = _suggestFileName(url);
@@ -163,84 +187,104 @@ Future<void> _startDownload(BuildContext context, WidgetRef ref, String url) asy
       // ignore: use_build_context_synchronously
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (c, setState) {
-          if (!started) {
-            started = true;
-            () async {
-              try {
-                await Dio().download(
-                  url,
-                  savePath,
-                  cancelToken: cancelToken,
-                  onReceiveProgress: (r, t) {
-                    setState(() {
-                      received = r;
-                      total = t;
-                    });
-                  },
-                );
-                // Validate and detect format
-                final format = filename.toLowerCase().endsWith('.epub') ? 'epub' : 'pdf';
-                if (format == 'pdf') {
-                  final doc = await PdfDocument.openFile(savePath);
-                  await doc.close();
-                } else {
-                  await EpubDocument.openFile(uni.File(savePath));
+        return StatefulBuilder(
+          builder: (c, setState) {
+            if (!started) {
+              started = true;
+              () async {
+                try {
+                  await Dio().download(
+                    url,
+                    savePath,
+                    cancelToken: cancelToken,
+                    onReceiveProgress: (r, t) {
+                      setState(() {
+                        received = r;
+                        total = t;
+                      });
+                    },
+                  );
+                  // Validate and detect format
+                  final format = filename.toLowerCase().endsWith('.epub')
+                      ? 'epub'
+                      : 'pdf';
+                  if (format == 'pdf') {
+                    final doc = await PdfDocument.openFile(savePath);
+                    await doc.close();
+                  } else {
+                    await EpubDocument.openFile(uni.File(savePath));
+                  }
+                  final title = p.basenameWithoutExtension(savePath);
+                  final id = await BookRepository().insert(
+                    Book(title: title, path: savePath, format: format),
+                  );
+                  if (!c.mounted) return;
+                  Navigator.pop(c); // close progress
+                  if (!context.mounted) return;
+                  final nav = GoRouter.of(context).push(
+                    '/reader',
+                    extra: Book(
+                      id: id,
+                      title: title,
+                      path: savePath,
+                      format: format,
+                    ),
+                  );
+                  // update list while away, and once back
+                  ref.invalidate(booksProvider);
+                  await nav;
+                  ref.invalidate(booksProvider);
+                } catch (e) {
+                  if (!c.mounted) return;
+                  Navigator.pop(c);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Falha no download: $e')),
+                  );
+                  try {
+                    await io.File(savePath).delete();
+                  } catch (_) {}
                 }
-                final title = p.basenameWithoutExtension(savePath);
-                final id = await BookRepository().insert(Book(title: title, path: savePath, format: format));
-                if (!c.mounted) return;
-                Navigator.pop(c); // close progress
-                if (!context.mounted) return;
-                final nav = GoRouter.of(context).push('/reader', extra: Book(id: id, title: title, path: savePath, format: format));
-                // update list while away, and once back
-                ref.invalidate(booksProvider);
-                await nav;
-                ref.invalidate(booksProvider);
-              } catch (e) {
-                if (!c.mounted) return;
-                Navigator.pop(c);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Falha no download: $e')),
-                );
-                try { await io.File(savePath).delete(); } catch (_) {}
-              }
-            }();
-          }
-          final value = (total > 0) ? (received / total) : null;
-          final percent = (value == null) ? '—' : '${(value * 100).toStringAsFixed(0)}%';
-          return AlertDialog(
-            title: const Text('Baixando...'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                LinearProgressIndicator(value: value),
-                const SizedBox(height: 8),
-                Text(percent),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => cancelToken.cancel('cancelado'),
-                child: const Text('Cancelar'),
+              }();
+            }
+            final value = (total > 0) ? (received / total) : null;
+            final percent = (value == null)
+                ? '—'
+                : '${(value * 100).toStringAsFixed(0)}%';
+            return AlertDialog(
+              title: const Text('Baixando...'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(value: value),
+                  const SizedBox(height: 8),
+                  Text(percent),
+                ],
               ),
-            ],
-          );
-        });
+              actions: [
+                TextButton(
+                  onPressed: () => cancelToken.cancel('cancelado'),
+                  child: const Text('Cancelar'),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Erro: $e')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Erro: $e')));
   }
 }
 
 String _suggestFileName(String url) {
   try {
     final uri = Uri.parse(url);
-    var name = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : 'arquivo.pdf';
+    var name = uri.pathSegments.isNotEmpty
+        ? uri.pathSegments.last
+        : 'arquivo.pdf';
     if (!name.toLowerCase().endsWith('.pdf')) name = '$name.pdf';
     return name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
   } catch (_) {
@@ -274,11 +318,22 @@ Future<void> _openBook(BuildContext context, WidgetRef ref, Book b) async {
     context: context,
     builder: (c) => AlertDialog(
       title: const Text('Arquivo não encontrado'),
-      content: Text('O arquivo associado a "${b.title}" não foi encontrado. O que deseja fazer?'),
+      content: Text(
+        'O arquivo associado a "${b.title}" não foi encontrado. O que deseja fazer?',
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(c, 'cancel'), child: const Text('Cancelar')),
-        TextButton(onPressed: () => Navigator.pop(c, 'relink'), child: const Text('Corrigir caminho…')),
-        FilledButton(onPressed: () => Navigator.pop(c, 'delete'), child: const Text('Remover')),
+        TextButton(
+          onPressed: () => Navigator.pop(c, 'cancel'),
+          child: const Text('Cancelar'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(c, 'relink'),
+          child: const Text('Corrigir caminho…'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(c, 'delete'),
+          child: const Text('Remover'),
+        ),
       ],
     ),
   );
@@ -295,7 +350,10 @@ Future<void> _openBook(BuildContext context, WidgetRef ref, Book b) async {
 }
 
 Future<void> _relinkBook(BuildContext context, WidgetRef ref, Book b) async {
-  final res = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: const ['pdf', 'epub']);
+  final res = await FilePicker.platform.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: const ['pdf', 'epub'],
+  );
   if (res == null || res.files.single.path == null) return;
   final newPath = res.files.single.path!;
   final ext = p.extension(newPath).toLowerCase();
@@ -305,11 +363,19 @@ Future<void> _relinkBook(BuildContext context, WidgetRef ref, Book b) async {
   if (format != b.format) {
     // quick direct update
     final db = await AppDb.instance;
-    await db.update('books', {'format': format}, where: 'id=?', whereArgs: [b.id]);
+    await db.update(
+      'books',
+      {'format': format},
+      where: 'id=?',
+      whereArgs: [b.id],
+    );
   }
   ref.invalidate(booksProvider);
   if (!context.mounted) return;
-  GoRouter.of(context).push('/reader', extra: b.copyWith(path: newPath, format: format));
+  GoRouter.of(context).push(
+    '/reader',
+    extra: b.copyWith(path: newPath, format: format),
+  );
 }
 
 Future<void> _deleteBook(BuildContext context, WidgetRef ref, Book b) async {
@@ -321,4 +387,3 @@ Future<void> _deleteBook(BuildContext context, WidgetRef ref, Book b) async {
     );
   }
 }
-

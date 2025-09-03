@@ -18,7 +18,7 @@ class App extends ConsumerWidget {
       routes: [
         GoRoute(
           path: '/',
-          builder: (_, __) => const LibraryScreen(),
+          builder: (_, _) => const LibraryScreen(),
           routes: [
             GoRoute(
               path: 'reader',
@@ -31,7 +31,7 @@ class App extends ConsumerWidget {
             ),
             GoRoute(
               path: 'gutenberg',
-              builder: (_, __) => const GutenbergScreen(),
+              builder: (_, _) => const GutenbergScreen(),
             ),
           ],
         ),
