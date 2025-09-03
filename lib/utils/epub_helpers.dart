@@ -19,3 +19,23 @@ String cleanTitle(String s) {
   return r.trim();
 }
 
+/// Finds the index of [rawTitle] inside the given [toc] (table of contents).
+///
+/// Titles are normalised and cleaned before comparison, so variants like
+/// "Chapter 1 - Foo" and "Capítulo 1: Foo" all resolve to the same entry.
+/// Returns `-1` when no matching chapter is found or when the cleaned title
+/// is empty (e.g. Project Gutenberg licence pages).
+int chapterIndex(String rawTitle, List<String> toc) {
+  final cleanedRaw = cleanTitle(rawTitle);
+  if (cleanedRaw.isEmpty) return -1;
+  final target = normTitle(cleanedRaw);
+
+  for (var i = 0; i < toc.length; i++) {
+    final ct = cleanTitle(toc[i]);
+    if (ct.isEmpty) continue;
+    if (normTitle(ct) == target) return i;
+  }
+
+  return -1;
+}
+
