@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:epub_view/epub_view.dart';
 import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_html/flutter_html.dart';
 
 import '../domain/book.dart';
 import '../data/book_repository.dart';
@@ -35,6 +37,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   /// Debouncer to avoid writing to the database on every tiny scroll.
   Timer? _saveDebounce;
+
+  /// Last known valid chapter number to fall back on when the reader
+  /// lands on sections that don't map to a chapter in the TOC.
+  int _lastChapterNumber = 0;
 
   @override
   void initState() {
@@ -178,6 +184,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
             // Actual EPUB rendering widget.
             EpubView(
               controller: _controller,
+              builders: EpubViewBuilders<DefaultBuilderOptions>(
+                options: const DefaultBuilderOptions(),
+                chapterBuilder: _chapterBuilderWithImages,
+              ),
               onExternalLinkPressed: (href) async {
                 final uri = Uri.tryParse(href);
                 if (uri != null && await canLaunchUrl(uri)) {
@@ -221,45 +231,77 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     );
   }
 
+  /// Custom chapter builder that forces images to decode into a safe RGBA8888
+  /// format and lowers the filter quality to avoid GPU texture issues on
+  /// some devices.
+  static Widget _chapterBuilderWithImages(
+    BuildContext context,
+    EpubViewBuilders builders,
+    EpubBook document,
+    List<EpubChapter> chapters,
+    List<Paragraph> paragraphs,
+    int index,
+    int chapterIndex,
+    int paragraphIndex,
+    ExternalLinkPressed onExternalLinkPressed,
+  ) {
+    if (paragraphs.isEmpty) {
+      return Container();
+    }
+
+    final defaultBuilder = builders as EpubViewBuilders<DefaultBuilderOptions>;
+    final options = defaultBuilder.options;
+
+    return Column(
+      children: <Widget>[
+        if (chapterIndex >= 0 && paragraphIndex == 0)
+          builders.chapterDividerBuilder(chapters[chapterIndex]),
+        Html(
+          data: paragraphs[index].element.outerHtml,
+          onLinkTap: (href, _, __) => onExternalLinkPressed(href!),
+          style: {
+            'html': Style(
+              padding: HtmlPaddings.only(
+                top: (options.paragraphPadding as EdgeInsets?)?.top,
+                right: (options.paragraphPadding as EdgeInsets?)?.right,
+                bottom: (options.paragraphPadding as EdgeInsets?)?.bottom,
+                left: (options.paragraphPadding as EdgeInsets?)?.left,
+              ),
+            ).merge(Style.fromTextStyle(options.textStyle)),
+          },
+          extensions: [
+            TagExtension(
+              tagsToExtend: {"img"},
+              builder: (imageContext) {
+                final url =
+                    imageContext.attributes['src']!.replaceAll('../', '');
+                final content = Uint8List.fromList(
+                    document.Content!.Images![url]!.Content!);
+                return Image.memory(
+                  content,
+                  filterQuality: FilterQuality.low,
+                );
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   String? _currentChapterLabel() {
     final v = _controller.currentValueListenable.value;
     final raw = v?.chapter?.Title?.trim();
-    if (raw == null || raw.isEmpty) return null;
 
-    final cleaned = cleanTitle(raw);
-    final toc = _flattenTocSafe();
-    final idx = chapterIndex(raw, toc);
+    final number = v?.chapterNumber ?? 0;
+    if (number > 0) _lastChapterNumber = number;
+    final idx = number > 0 ? number : _lastChapterNumber;
+    final cleaned = raw != null ? cleanTitle(raw) : '';
     debugPrint('Current chapter: raw="$raw" cleaned="$cleaned" index=$idx');
-    final prefix = idx >= 0 ? 'Capítulo ${idx + 1} — ' : '';
+    final prefix = idx > 0 ? 'Capítulo $idx — ' : '';
     final text = cleaned.isEmpty
         ? (prefix.isNotEmpty ? prefix.substring(0, prefix.length - 3) : null)
         : '$prefix$cleaned';
     return text?.trim();
-  }
-
-  /// Returns a flattened list of chapter titles from the EPUB TOC.
-  List<String> _flattenTocSafe() {
-    try {
-      final toc = _controller.tableOfContents();
-      final out = <String>[];
-      void walk(dynamic node) {
-        if (node == null) return;
-        final title = (node.title ?? '').toString();
-        if (title.trim().isNotEmpty) out.add(title);
-        final children = node.subChapters as List<dynamic>?;
-        if (children != null) {
-          for (final c in children) {
-            walk(c);
-          }
-        }
-      }
-
-      for (final n in toc) {
-        walk(n);
-      }
-      return out;
-    } catch (_) {
-      return const [];
-    }
   }
 }
