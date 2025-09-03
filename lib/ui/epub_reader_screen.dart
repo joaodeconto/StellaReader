@@ -17,6 +17,7 @@ class EpubReaderScreen extends ConsumerStatefulWidget {
 
 class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
   late EpubController _controller;
+  bool _didInitialCfiJump = false;
 
   @override
   void initState() {
@@ -25,6 +26,16 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
       document: EpubDocument.openFile(uni.File(widget.book.path)),
       epubCfi: widget.book.lastCfi,
     );
+
+    // Ensure we jump to saved CFI when document finishes loading
+    _controller.loadingState.addListener(() {
+      if (_controller.loadingState.value == EpubViewLoadingState.success &&
+          !_didInitialCfiJump &&
+          (widget.book.lastCfi != null && widget.book.lastCfi!.isNotEmpty)) {
+        _didInitialCfiJump = true;
+        _controller.gotoEpubCfi(widget.book.lastCfi!);
+      }
+    });
   }
 
   Future<void> _saveLastLocation() async {
@@ -40,7 +51,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
     if (widget.book.id == null) return;
     final cfi = _controller.generateEpubCfi();
     if (cfi == null) return;
-    final label = _controller.currentValueListenable.value?.chapter?.Title;
+    final label = _currentChapterLabel();
     await BookmarkRepository().insert(Bookmark(
       bookId: widget.book.id!,
       page: 1,
@@ -122,7 +133,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
                   child: ValueListenableBuilder(
                     valueListenable: _controller.currentValueListenable,
                     builder: (context, value, _) => Text(
-                      (value?.chapter?.Title) ?? '…',
+                      _currentChapterLabel() ?? '…',
                       style: const TextStyle(color: Colors.white),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -139,5 +150,32 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
         ),
       ),
     );
+  }
+
+  String? _currentChapterLabel() {
+    final v = _controller.currentValueListenable.value;
+    final raw = (v?.chapter?.Title)?.trim();
+    if (raw == null || raw.isEmpty) return null;
+    final cleaned = _cleanTitle(raw);
+    // Try to compute a chapter number from ToC
+    String prefix = '';
+    try {
+      final toc = _controller.tableOfContents();
+      final idx = toc.indexWhere((c) => (c.title ?? '').trim().toLowerCase() == raw.toLowerCase());
+      if (idx >= 0) prefix = 'Capítulo ${idx + 1} — ';
+    } catch (_) {}
+    final text = cleaned.isEmpty ? (prefix.isNotEmpty ? prefix.replaceAll(RegExp(r'\s—\s?$'), '') : null) : '$prefix$cleaned';
+    return text?.trim();
+  }
+
+  String _cleanTitle(String s) {
+    final lowered = s.toLowerCase();
+    // Filter common Gutenberg headings
+    if (lowered.contains('project gutenberg')) {
+      // Return empty so we can fall back to prefix only
+      return '';
+    }
+    // Remove excessive whitespace
+    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
 }
