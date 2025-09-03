@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:epub_view/epub_view.dart';
 import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../domain/book.dart';
 import '../data/book_repository.dart';
 import '../domain/bookmark.dart';
@@ -15,50 +19,69 @@ class EpubReaderScreen extends ConsumerStatefulWidget {
   ConsumerState<EpubReaderScreen> createState() => _EpubReaderScreenState();
 }
 
-class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
+class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
+    with WidgetsBindingObserver {
   late EpubController _controller;
   bool _didInitialCfiJump = false;
+  late VoidCallback _loadingListener;
+  Timer? _saveDebounce;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller = EpubController(
       document: EpubDocument.openFile(uni.File(widget.book.path)),
       epubCfi: widget.book.lastCfi,
     );
 
-    // Ensure we jump to saved CFI when document finishes loading
-    _controller.loadingState.addListener(() {
+    _loadingListener = () {
       if (_controller.loadingState.value == EpubViewLoadingState.success &&
           !_didInitialCfiJump &&
           (widget.book.lastCfi != null && widget.book.lastCfi!.isNotEmpty)) {
         _didInitialCfiJump = true;
         _controller.gotoEpubCfi(widget.book.lastCfi!);
       }
-    });
+    };
+    _controller.loadingState.addListener(_loadingListener);
+
+    _controller.currentValueListenable.addListener(_onLocationChanged);
+  }
+
+  void _onLocationChanged() {
+    _saveDebounce?.cancel();
+    _saveDebounce =
+        Timer(const Duration(milliseconds: 600), _saveLastLocation);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _saveLastLocation();
+    }
   }
 
   Future<void> _saveLastLocation() async {
-    if (widget.book.id != null) {
-      final cfi = _controller.generateEpubCfi();
-      if (cfi != null) {
-        await BookRepository().updateLastCfi(widget.book.id!, cfi);
-      }
-    }
+    if (widget.book.id == null) return;
+    final cfi = _controller.generateEpubCfi();
+    if (cfi == null || cfi.isEmpty) return;
+    await BookRepository().updateLastCfi(widget.book.id!, cfi);
   }
 
   Future<void> _addBookmark() async {
     if (widget.book.id == null) return;
     final cfi = _controller.generateEpubCfi();
     if (cfi == null) return;
-    final label = _currentChapterLabel();
+
+    final label = _currentChapterLabel() ?? 'Localização';
     await BookmarkRepository().insert(Bookmark(
       bookId: widget.book.id!,
-      page: 1,
+      page: 0,
       cfi: cfi,
       label: label,
       createdAt: DateTime.now().millisecondsSinceEpoch,
     ));
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Marcador adicionado')),
@@ -98,6 +121,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller.currentValueListenable.removeListener(_onLocationChanged);
+    _saveDebounce?.cancel();
+    _controller.loadingState.removeListener(_loadingListener);
     _saveLastLocation();
     _controller.dispose();
     super.dispose();
@@ -106,7 +133,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      onPopInvokedWithResult: (didPop, result) => _saveLastLocation(),
+      onPopInvoked: (didPop) => _saveLastLocation(),
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.book.title),
@@ -118,6 +145,12 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
           children: [
             EpubView(
               controller: _controller,
+              onExternalLinkPressed: (href) async {
+                final uri = Uri.tryParse(href);
+                if (uri != null && await canLaunchUrl(uri)) {
+                  await launchUrl(uri);
+                }
+              },
             ),
             Positioned(
               left: 16,
@@ -154,28 +187,60 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen> {
 
   String? _currentChapterLabel() {
     final v = _controller.currentValueListenable.value;
-    final raw = (v?.chapter?.Title)?.trim();
+    final raw = v?.chapter?.Title?.trim();
     if (raw == null || raw.isEmpty) return null;
+
     final cleaned = _cleanTitle(raw);
-    // Try to compute a chapter number from ToC
-    String prefix = '';
-    try {
-      final toc = _controller.tableOfContents();
-      final idx = toc.indexWhere((c) => (c.title ?? '').trim().toLowerCase() == raw.toLowerCase());
-      if (idx >= 0) prefix = 'Capítulo ${idx + 1} — ';
-    } catch (_) {}
-    final text = cleaned.isEmpty ? (prefix.isNotEmpty ? prefix.replaceAll(RegExp(r'\s—\s?$'), '') : null) : '$prefix$cleaned';
+    final toc = _flattenTocSafe();
+    final idx = toc.indexWhere((t) => _norm(t) == _norm(raw));
+
+    final prefix = idx >= 0 ? 'Capítulo ${idx + 1} — ' : '';
+    final text = cleaned.isEmpty
+        ? (prefix.isNotEmpty ? prefix.substring(0, prefix.length - 3) : null)
+        : '$prefix$cleaned';
     return text?.trim();
   }
 
-  String _cleanTitle(String s) {
-    final lowered = s.toLowerCase();
-    // Filter common Gutenberg headings
-    if (lowered.contains('project gutenberg')) {
-      // Return empty so we can fall back to prefix only
-      return '';
+  String _norm(String s) =>
+      s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
+
+  List<String> _flattenTocSafe() {
+    try {
+      final toc = _controller.tableOfContents();
+      final out = <String>[];
+      void walk(dynamic node) {
+        if (node == null) return;
+        final title = (node.title ?? '').toString();
+        if (title.trim().isNotEmpty) out.add(title);
+        final children = node.subChapters as List<dynamic>?;
+        if (children != null) {
+          for (final c in children) {
+            walk(c);
+          }
+        }
+      }
+
+      for (final n in toc) {
+        walk(n);
+      }
+      return out;
+    } catch (_) {
+      return const [];
     }
-    // Remove excessive whitespace
-    return s.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
+
+  String _cleanTitle(String s) {
+    var r = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final lowered = r.toLowerCase();
+    if (lowered.contains('project gutenberg') ||
+        lowered.startsWith('chapter ') ||
+        lowered.startsWith('capítulo ')) {
+      r = r.replaceFirst(
+          RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*',
+              caseSensitive: false),
+          '');
+      if (r.toLowerCase().contains('project gutenberg')) return '';
+    }
+    return r.trim();
   }
 }
