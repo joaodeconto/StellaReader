@@ -17,5 +17,10 @@ class BookRepository {
     final db = await AppDb.instance;
     await db.update('books', {'lastPage': page}, where: 'id=?', whereArgs: [bookId]);
   }
+
+  Future<void> updateLastCfi(int bookId, String cfi) async {
+    final db = await AppDb.instance;
+    await db.update('books', {'lastCfi': cfi}, where: 'id=?', whereArgs: [bookId]);
+  }
 }
 

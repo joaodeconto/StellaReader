@@ -40,6 +40,8 @@ dependencies:
   sqflite: any
   path_provider: any
   file_picker: any
+  epub_view: any
+  universal_io: any
   # Optional extras for MVP+
   receive_sharing_intent: any
   dio: any
