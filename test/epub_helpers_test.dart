@@ -12,6 +12,13 @@ void main() {
     test('normTitle collapses whitespace and lowercases', () {
       expect(normTitle('  Hello   World '), 'hello world');
     });
+
+    test('chapterIndex resolves chapter positions', () {
+      final toc = ['Preface', 'Chapter 1: Start', 'Capítulo 2 - Meio'];
+      expect(chapterIndex('Chapter 1 - Start', toc), 1);
+      expect(chapterIndex('Capítulo 2: Meio', toc), 2);
+      expect(chapterIndex('Project Gutenberg', toc), -1);
+    });
   });
 }
 
