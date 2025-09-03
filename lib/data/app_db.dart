@@ -14,22 +14,24 @@ class AppDb {
       version: 1,
       onCreate: (db, v) async {
         await db.execute('''
-          CREATE TABLE books(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            path TEXT NOT NULL,
-            lastPage INTEGER NOT NULL DEFAULT 1
-          );
+            CREATE TABLE books(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              title TEXT NOT NULL,
+              path TEXT NOT NULL,
+              lastPage INTEGER NOT NULL DEFAULT 1,
+              lastCfi TEXT
+            );
         ''');
         await db.execute('''
-          CREATE TABLE bookmarks(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            bookId INTEGER NOT NULL,
-            page INTEGER NOT NULL,
-            label TEXT,
-            createdAt INTEGER NOT NULL,
-            FOREIGN KEY(bookId) REFERENCES books(id) ON DELETE CASCADE
-          );
+            CREATE TABLE bookmarks(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              bookId INTEGER NOT NULL,
+              page INTEGER NOT NULL,
+              cfi TEXT,
+              label TEXT,
+              createdAt INTEGER NOT NULL,
+              FOREIGN KEY(bookId) REFERENCES books(id) ON DELETE CASCADE
+            );
         ''');
       },
     );
