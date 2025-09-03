@@ -228,7 +228,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
     final cleaned = cleanTitle(raw);
     final toc = _flattenTocSafe();
-    final idx = toc.indexWhere((t) => normTitle(t) == normTitle(raw));
+    final idx = chapterIndex(raw, toc);
     debugPrint('Current chapter: raw="$raw" cleaned="$cleaned" index=$idx');
     final prefix = idx >= 0 ? 'Capítulo ${idx + 1} — ' : '';
     final text = cleaned.isEmpty
