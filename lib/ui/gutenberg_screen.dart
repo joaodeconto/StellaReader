@@ -17,7 +17,8 @@ import 'library_screen.dart' as lib;
 
 final _queryProvider = StateProvider<String>((_) => '');
 final _pageProvider = StateProvider<int>((_) => 1);
-final _resultsProvider = FutureProvider.autoDispose<List<GutenbergBook>>((ref) async {
+final _resultsProvider =
+    FutureProvider.autoDispose<List<GutenbergBook>>((ref) async {
   final q = ref.watch(_queryProvider);
   final page = ref.watch(_pageProvider);
   final svc = GutendexService();
@@ -60,7 +61,8 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
           IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              ref.read(_queryProvider.notifier).state = _searchCtrl.text.trim();
+              ref.read(_queryProvider.notifier).state =
+                  _searchCtrl.text.trim();
               ref.read(_pageProvider.notifier).state = 1;
             },
           )
@@ -81,20 +83,31 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
                 leading: b.coverUrl != null
                     ? ClipRRect(
                         borderRadius: BorderRadius.circular(6),
-                        child: m.Image.network(b.coverUrl!, width: 48, height: 48, fit: BoxFit.cover),
+                        child: m.Image.network(b.coverUrl!,
+                            width: 48, height: 48, fit: BoxFit.cover),
                       )
                     : const Icon(Icons.menu_book_outlined),
-                title: Text(b.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                subtitle: Text(b.author ?? 'Autor desconhecido', maxLines: 1, overflow: TextOverflow.ellipsis),
+                title: Text(b.title,
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                subtitle: Text(b.author ?? 'Autor desconhecido',
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: Wrap(spacing: 8, children: [
                   IconButton(
-                    tooltip: hasPdf ? 'Baixar PDF' : 'PDF indisponível',
-                    onPressed: hasPdf ? () => _downloadFormat(context, ref, b, 'pdf') : null,
+                    tooltip:
+                        hasPdf ? 'Baixar PDF' : 'PDF indisponível',
+                    onPressed: hasPdf
+                        ? () =>
+                            _downloadFormat(context, ref, b, 'pdf')
+                        : null,
                     icon: const Icon(Icons.picture_as_pdf),
                   ),
                   IconButton(
-                    tooltip: hasEpub ? 'Baixar EPUB' : 'EPUB indisponível',
-                    onPressed: hasEpub ? () => _downloadFormat(context, ref, b, 'epub') : null,
+                    tooltip:
+                        hasEpub ? 'Baixar EPUB' : 'EPUB indisponível',
+                    onPressed: hasEpub
+                        ? () =>
+                            _downloadFormat(context, ref, b, 'epub')
+                        : null,
                     icon: const Icon(Icons.book_outlined),
                   ),
                 ]),
@@ -133,10 +146,12 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
     );
   }
 
-  Future<void> _downloadFormat(BuildContext context, WidgetRef ref, GutenbergBook g, String format) async {
+  Future<void> _downloadFormat(
+      BuildContext context, WidgetRef ref, GutenbergBook g, String format) async {
     final url = format == 'pdf' ? g.pdfUrl! : g.epubUrl!;
     final dir = await getApplicationDocumentsDirectory();
-    final filename = _sanitizeFileName('${g.title}.${format == 'pdf' ? 'pdf' : 'epub'}');
+    final filename = _sanitizeFileName(
+        '${g.title}.${format == 'pdf' ? 'pdf' : 'epub'}');
     final savePath = _uniquePath(io.File(p.join(dir.path, filename)));
     final cancelToken = CancelToken();
     int received = 0;
@@ -153,7 +168,8 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
             started = true;
             () async {
               try {
-                await Dio().download(url, savePath, cancelToken: cancelToken, onReceiveProgress: (r, t) {
+                await Dio().download(url, savePath,
+                    cancelToken: cancelToken, onReceiveProgress: (r, t) {
                   setState(() {
                     received = r;
                     total = t;
@@ -165,24 +181,31 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
                 } else {
                   await EpubDocument.openFile(uni.File(savePath));
                 }
-                final id = await BookRepository().insert(Book(title: g.title, path: savePath, format: format));
+                final id = await BookRepository()
+                    .insert(Book(title: g.title, path: savePath, format: format));
                 if (!c.mounted) return;
                 Navigator.pop(c);
                 if (!context.mounted) return;
-                final nav = GoRouter.of(context).push('/reader', extra: Book(id: id, title: g.title, path: savePath, format: format));
+                final nav = GoRouter.of(context).push('/reader',
+                    extra: Book(
+                        id: id, title: g.title, path: savePath, format: format));
                 // Refresh library once back
                 await nav;
                 ref.invalidate(lib.booksProvider);
               } catch (e) {
                 if (!c.mounted) return;
                 Navigator.pop(c);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha no download: $e')));
-                try { await io.File(savePath).delete(); } catch (_) {}
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Falha no download: $e')));
+                try {
+                  await io.File(savePath).delete();
+                } catch (_) {}
               }
             }();
           }
           final value = (total > 0) ? (received / total) : null;
-          final percent = (value == null) ? '—' : '${(value * 100).toStringAsFixed(0)}%';
+          final percent =
+              (value == null) ? '' : '${(value * 100).toStringAsFixed(0)}%';
           return AlertDialog(
             title: const Text('Baixando...'),
             content: Column(
@@ -205,7 +228,8 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
     );
   }
 
-  String _sanitizeFileName(String name) => name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+  String _sanitizeFileName(String name) =>
+      name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
   String _uniquePath(io.File target) {
     var path = target.path;
     if (!target.existsSync()) return path;
@@ -219,3 +243,4 @@ class _GutenbergScreenState extends ConsumerState<GutenbergScreen> {
     return p.join(dir, '$base($i)$ext');
   }
 }
+

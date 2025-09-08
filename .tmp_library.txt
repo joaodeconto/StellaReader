@@ -112,7 +112,7 @@ class LibraryScreen extends ConsumerWidget {
         onPressed: () async {
           final res = await FilePicker.platform.pickFiles(
             type: FileType.custom,
-            allowedExtensions: const ['pdf', 'epub'],
+            allowedExtensions: ['pdf'],
           );
           if (res != null && res.files.single.path != null) {
             final path = res.files.single.path!;
@@ -143,12 +143,10 @@ Future<void> _promptDownload(BuildContext context, WidgetRef ref) async {
   final url = await showDialog<String?>(
     context: context,
     builder: (c) => AlertDialog(
-      title: const Text('Baixar por URL'),
+      title: const Text('Baixar PDF por URL'),
       content: TextField(
         controller: ctrl,
-        decoration: const InputDecoration(
-          hintText: 'https://.../arquivo.pdf ou .epub',
-        ),
+        decoration: const InputDecoration(hintText: 'https://.../arquivo.pdf'),
         keyboardType: TextInputType.url,
         autofocus: true,
       ),
@@ -250,7 +248,7 @@ Future<void> _startDownload(
             }
             final value = (total > 0) ? (received / total) : null;
             final percent = (value == null)
-                ? ''
+                ? '—'
                 : '${(value * 100).toStringAsFixed(0)}%';
             return AlertDialog(
               title: const Text('Baixando...'),
@@ -389,3 +387,4 @@ Future<void> _deleteBook(BuildContext context, WidgetRef ref, Book b) async {
     );
   }
 }
+

@@ -8,11 +8,18 @@ String normTitle(String s) =>
 String cleanTitle(String s) {
   var r = s.replaceAll(RegExp(r'\s+'), ' ').trim();
   final lowered = r.toLowerCase();
+
+  final startsWithChapter =
+      RegExp(r'^chapter\s+\d+\b', caseSensitive: false).hasMatch(lowered);
+  final startsWithCapitulo =
+      RegExp(r'^cap[ií]tulo\s+\d+\b', caseSensitive: false).hasMatch(lowered);
+
   if (lowered.contains('project gutenberg') ||
-      lowered.startsWith('chapter ') ||
-      lowered.startsWith('capítulo ')) {
+      startsWithChapter ||
+      startsWithCapitulo) {
     r = r.replaceFirst(
-      RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*', caseSensitive: false),
+      RegExp(r'^(chapter|cap[ií]tulo)\s+\d+\s*[:\-–"“”]?\s*',
+          caseSensitive: false),
       '',
     );
     if (r.toLowerCase().contains('project gutenberg')) return '';
@@ -39,3 +46,4 @@ int chapterIndex(String rawTitle, List<String> toc) {
 
   return -1;
 }
+

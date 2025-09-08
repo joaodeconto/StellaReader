@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:epub_view/epub_view.dart' hide Image;
 import 'package:universal_file/universal_file.dart' as uni;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:flutter_html/flutter_html.dart';
 
 import '../domain/book.dart';
 import '../data/book_repository.dart';
@@ -38,9 +36,10 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   /// Debouncer to avoid writing to the database on every tiny scroll.
   Timer? _saveDebounce;
 
-  /// Last known valid chapter number to fall back on when the reader
-  /// lands on sections that don't map to a chapter in the TOC.
-  int _lastChapterNumber = 0;
+  /// Last non-empty chapter label we've seen, used to avoid showing noisy
+  /// sections like the Gutenberg license.
+  String _lastNonEmptyChapterLabel = '';
+  bool _didBackfillIndices = false;
 
   @override
   void initState() {
@@ -57,12 +56,22 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     // When the document finishes loading, jump to last known location if any.
     _loadingListener = () {
       debugPrint('Loading state: ${_controller.loadingState.value}');
-      if (_controller.loadingState.value == EpubViewLoadingState.success &&
-          !_didInitialCfiJump &&
-          (widget.book.lastCfi != null && widget.book.lastCfi!.isNotEmpty)) {
-        _didInitialCfiJump = true;
-        debugPrint('Jumping to stored CFI: ${widget.book.lastCfi}');
-        _controller.gotoEpubCfi(widget.book.lastCfi!);
+      if (_controller.loadingState.value == EpubViewLoadingState.success) {
+        if (!_didInitialCfiJump &&
+            (widget.book.lastCfi != null && widget.book.lastCfi!.isNotEmpty)) {
+          _didInitialCfiJump = true;
+          debugPrint('Jumping to stored CFI: ${widget.book.lastCfi}');
+          _controller.gotoEpubCfi(widget.book.lastCfi!);
+          // Also align to stored paragraph index if present (more robust for some books)
+          if (widget.book.lastPage > 0) {
+            Future.delayed(const Duration(milliseconds: 120), () {
+              debugPrint('Aligning to stored index: ${widget.book.lastPage}');
+              _controller.jumpTo(index: widget.book.lastPage, alignment: 0.05);
+            });
+          }
+        }
+        // Kick off a one-time bookmark index backfill in the background.
+        _backfillBookmarkIndicesIfNeeded();
       }
     };
     _controller.loadingState.addListener(_loadingListener);
@@ -96,21 +105,41 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     if (cfi == null || cfi.isEmpty) return;
     debugPrint('Saving CFI: $cfi for book id: ${widget.book.id}');
     await BookRepository().updateLastCfi(widget.book.id!, cfi);
+    final idx = _controller.currentValueListenable.value?.position.index;
+    if (idx != null) {
+      await BookRepository().updateLastPage(widget.book.id!, idx);
+    }
   }
 
   Future<void> _addBookmark() async {
     if (widget.book.id == null) return;
     final cfi = _controller.generateEpubCfi();
-    if (cfi == null) return;
+    if (cfi == null || cfi.isEmpty) return;
 
-    final label = _currentChapterLabel() ?? 'Localização';
+    // Avoid duplicate bookmarks for the same location.
+    final repo = BookmarkRepository();
+    final exists = await repo.existsByCfi(widget.book.id!, cfi);
+    if (exists) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Este marcador já existe')));
+      return;
+    }
+
+    final label = _displayChapterLabel() ?? 'Localização atual';
+    final absIndex =
+        _controller.currentValueListenable.value?.position.index ?? 0;
     debugPrint('Adding bookmark: label="$label" cfi=$cfi');
-    await BookmarkRepository().insert(
+    await repo.insert(
       Bookmark(
         bookId: widget.book.id!,
-        page: 0,
+        page: absIndex, // Use absolute paragraph index for reliable jumps
         cfi: cfi,
-        label: label,
+        // Prefer current chapter label; if fallback text, use date
+        label:
+            _displayChapterLabel() ??
+            (label.contains('Localiza') ? _formatNowLabel() : label),
         createdAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
@@ -123,34 +152,104 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   Future<void> _showBookmarks() async {
     if (widget.book.id == null) return;
-    final items = await BookmarkRepository().byBook(widget.book.id!);
+    final repo = BookmarkRepository();
+    var items = await repo.byBook(widget.book.id!);
     debugPrint('Loaded ${items.length} bookmarks');
     if (!mounted) return;
     showModalBottomSheet(
       context: context,
-      builder: (_) => ListView(
-        children: items.isEmpty
-            ? [const ListTile(title: Text('Sem marcadores'))]
-            : items
-                  .map(
-                    (bm) => ListTile(
-                      leading: const Icon(Icons.bookmark),
-                      title: Text(bm.label ?? 'Localização'),
-                      onTap: () {
-                        final cfi = bm.cfi;
-                        Navigator.pop(context);
-                        if (cfi != null) {
-                          debugPrint('Jumping to bookmark CFI: $cfi');
-                          // jump after sheet closes
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            _controller.gotoEpubCfi(cfi);
-                          });
+      builder: (ctx) {
+        Future<void> renameBookmark(Bookmark bm) async {
+          final controller = TextEditingController(
+            text: bm.label ?? _displayChapterLabel() ?? '',
+          );
+          final newLabel = await showDialog<String>(
+            context: ctx,
+            builder: (dctx) => AlertDialog(
+              title: const Text('Renomear marcador'),
+              content: TextField(
+                controller: controller,
+                decoration: const InputDecoration(
+                  hintText: 'Título do marcador',
+                ),
+                autofocus: true,
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dctx),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(dctx, controller.text.trim()),
+                  child: const Text('Salvar'),
+                ),
+              ],
+            ),
+          );
+          if (newLabel != null && newLabel.isNotEmpty) {
+            await repo.updateLabel(bm.id!, newLabel);
+            final idx = items.indexWhere((e) => e.id == bm.id);
+            if (idx >= 0) {
+              items[idx] = Bookmark(
+                id: bm.id,
+                bookId: bm.bookId,
+                page: bm.page,
+                cfi: bm.cfi,
+                label: newLabel,
+                createdAt: bm.createdAt,
+              );
+            }
+          }
+        }
+
+        Future<void> deleteBookmark(Bookmark bm) async {
+          await repo.delete(bm.id!);
+          items = items.where((e) => e.id != bm.id).toList();
+        }
+
+        if (items.isEmpty) {
+          return const ListTile(title: Text('Sem marcadores'));
+        }
+
+        return ListView(
+          children: items
+              .map(
+                (bm) => ListTile(
+                  leading: const Icon(Icons.bookmark),
+                  title: Text(bm.label ?? _formatDate(bm.createdAt)),
+                  onTap: () {
+                    final cfi = bm.cfi;
+                    Navigator.pop(context);
+                    WidgetsBinding.instance.addPostFrameCallback((_) async {
+                      if (bm.page > 0) {
+                        debugPrint('Jumping by index: ${bm.page}');
+                        _controller.jumpTo(index: bm.page, alignment: 0.05);
+                        await Future.delayed(const Duration(milliseconds: 120));
+                      }
+                      if (cfi != null && cfi.isNotEmpty) {
+                        debugPrint('Refining with CFI: $cfi');
+                        _controller.gotoEpubCfi(
+                          cfi,
+                          alignment: 0.0,
+                          duration: Duration.zero,
+                        );
+                        await Future.delayed(const Duration(milliseconds: 140));
+                        final idx = _controller
+                            .currentValueListenable
+                            .value
+                            ?.position
+                            .index;
+                        if (idx != null && bm.page != idx && bm.id != null) {
+                          await repo.updatePage(bm.id!, idx);
                         }
-                      },
-                    ),
-                  )
-                  .toList(),
-      ),
+                      }
+                    });
+                  },
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 
@@ -187,9 +286,8 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
             // Actual EPUB rendering widget.
             EpubView(
               controller: _controller,
-              builders: EpubViewBuilders<DefaultBuilderOptions>(
-                options: const DefaultBuilderOptions(),
-                chapterBuilder: _chapterBuilderWithImages,
+              builders: const EpubViewBuilders<DefaultBuilderOptions>(
+                options: DefaultBuilderOptions(),
               ),
               onExternalLinkPressed: (href) async {
                 final uri = Uri.tryParse(href);
@@ -212,14 +310,28 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
                     color: Colors.black54,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: ValueListenableBuilder(
-                    valueListenable: _controller.currentValueListenable,
-                    builder: (context, value, _) => Text(
-                      _currentChapterLabel() ?? '…',
-                      style: const TextStyle(color: Colors.white),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
+                  child: EpubViewActualChapter(
+                    controller: _controller,
+                    builder: (chapterValue) {
+                      final raw = chapterValue?.chapter?.Title
+                          ?.replaceAll('\n', '')
+                          .trim();
+                      final cleaned = raw != null ? cleanTitle(raw) : '';
+                      if (cleaned.isNotEmpty) {
+                        _lastNonEmptyChapterLabel = cleaned;
+                      }
+                      final text = cleaned.isNotEmpty
+                          ? cleaned
+                          : (_lastNonEmptyChapterLabel.isNotEmpty
+                                ? _lastNonEmptyChapterLabel
+                                : '');
+                      return Text(
+                        text,
+                        style: const TextStyle(color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      );
+                    },
                   ),
                 ),
               ),
@@ -234,77 +346,87 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     );
   }
 
-  /// Custom chapter builder that forces images to decode into a safe RGBA8888
-  /// format and lowers the filter quality to avoid GPU texture issues on
-  /// some devices.
-  static Widget _chapterBuilderWithImages(
-    BuildContext context,
-    EpubViewBuilders builders,
-    EpubBook document,
-    List<EpubChapter> chapters,
-    List paragraphs,
-    int index,
-    int chapterIndex,
-    int paragraphIndex,
-    ExternalLinkPressed onExternalLinkPressed,
-  ) {
-    if (paragraphs.isEmpty) {
-      return Container();
+  // Using the default EpubView builders to ensure CFI navigation works reliably.
+
+  // One-time background backfill of bookmark indices to absolute paragraph index.
+  Future<void> _backfillBookmarkIndicesIfNeeded() async {
+    if (_didBackfillIndices || widget.book.id == null) return;
+    _didBackfillIndices = true;
+    final repo = BookmarkRepository();
+    final items = await repo.byBook(widget.book.id!);
+    final origCfi = _controller.generateEpubCfi();
+    final origIdx = _controller.currentValueListenable.value?.position.index;
+    for (final bm in items) {
+      if (bm.id == null) continue;
+      final needsIdx = bm.page <= 1;
+      final needsLabel = _isGenericLabel(bm.label);
+      if (!needsIdx && !needsLabel) continue;
+
+      try {
+        if (bm.cfi != null && bm.cfi!.isNotEmpty) {
+          _controller.gotoEpubCfi(
+            bm.cfi!,
+            alignment: 0.0,
+            duration: Duration.zero,
+          );
+          await Future.delayed(const Duration(milliseconds: 140));
+        } else if (bm.page > 0) {
+          _controller.jumpTo(index: bm.page, alignment: 0.05);
+          await Future.delayed(const Duration(milliseconds: 120));
+        }
+
+        final idx = _controller.currentValueListenable.value?.position.index;
+        if (needsIdx && idx != null) {
+          await repo.updatePage(bm.id!, idx);
+        }
+
+        if (needsLabel) {
+          final newLabel = _displayChapterLabel() ?? _formatDate(bm.createdAt);
+          if (newLabel != bm.label) {
+            await repo.updateLabel(bm.id!, newLabel);
+          }
+        }
+      } catch (_) {}
     }
-
-    final defaultBuilder = builders as EpubViewBuilders<DefaultBuilderOptions>;
-    final options = defaultBuilder.options;
-
-    return Column(
-      children: <Widget>[
-        if (chapterIndex >= 0 && paragraphIndex == 0)
-          builders.chapterDividerBuilder(chapters[chapterIndex]),
-        Html(
-          data: paragraphs[index].element.outerHtml,
-          onLinkTap: (href, _, _) => onExternalLinkPressed(href!),
-          style: {
-            'html': Style(
-              padding: HtmlPaddings.only(
-                top: (options.paragraphPadding as EdgeInsets?)?.top,
-                right: (options.paragraphPadding as EdgeInsets?)?.right,
-                bottom: (options.paragraphPadding as EdgeInsets?)?.bottom,
-                left: (options.paragraphPadding as EdgeInsets?)?.left,
-              ),
-            ).merge(Style.fromTextStyle(options.textStyle)),
-          },
-          extensions: [
-            TagExtension(
-              tagsToExtend: {"img"},
-              builder: (imageContext) {
-                final url = imageContext.attributes['src']!.replaceAll(
-                  '../',
-                  '',
-                );
-                final content = Uint8List.fromList(
-                  document.Content!.Images![url]!.Content!,
-                );
-                return Image.memory(content, filterQuality: FilterQuality.low);
-              },
-            ),
-          ],
-        ),
-      ],
-    );
+    // Restore reader position
+    if (origIdx != null) {
+      _controller.jumpTo(index: origIdx, alignment: 0.05);
+      await Future.delayed(const Duration(milliseconds: 80));
+    }
+    if (origCfi != null && origCfi.isNotEmpty) {
+      _controller.gotoEpubCfi(origCfi, alignment: 0.0, duration: Duration.zero);
+    }
   }
 
-  String? _currentChapterLabel() {
+  String _formatNowLabel() =>
+      _formatDate(DateTime.now().millisecondsSinceEpoch);
+  String _formatDate(int millis) {
+    final d = DateTime.fromMillisecondsSinceEpoch(millis);
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${d.year}-${two(d.month)}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  bool _isGenericLabel(String? s) {
+    if (s == null) return true;
+    final t = s.trim().toLowerCase();
+    if (t.isEmpty) return true;
+    if (t == 'marcador' || t == 'bookmark') return true;
+    if (t.contains('localiza')) return true;
+    return false;
+  }
+
+  String? _displayChapterLabel() {
     final v = _controller.currentValueListenable.value;
     final raw = v?.chapter?.Title?.trim();
-
-    final number = v?.chapterNumber ?? 0;
-    if (number > 0) _lastChapterNumber = number;
-    final idx = number > 0 ? number : _lastChapterNumber;
     final cleaned = raw != null ? cleanTitle(raw) : '';
-    debugPrint('Current chapter: raw="$raw" cleaned="$cleaned" index=$idx');
-    final prefix = idx > 0 ? 'Capítulo $idx — ' : '';
-    final text = cleaned.isEmpty
-        ? (prefix.isNotEmpty ? prefix.substring(0, prefix.length - 3) : null)
-        : '$prefix$cleaned';
-    return text?.trim();
+    if (cleaned.isNotEmpty) {
+      _lastNonEmptyChapterLabel = cleaned;
+      return cleaned;
+    }
+    return _lastNonEmptyChapterLabel.isNotEmpty
+        ? _lastNonEmptyChapterLabel
+        : null;
   }
+
+  // _currentChapterLabel was replaced by EpubViewActualChapter + _displayChapterLabel.
 }
