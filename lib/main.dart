@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import 'data/import_service.dart';
+import 'domain/book.dart';
+import 'ui/epub_reader_screen.dart';
 import 'ui/library_screen.dart';
 import 'ui/reader_screen.dart';
-import 'domain/book.dart';
 
 void main() => runApp(const ProviderScope(child: App()));
 
@@ -22,7 +25,9 @@ class App extends ConsumerWidget {
               path: 'reader',
               builder: (_, state) {
                 final book = state.extra as Book;
-                return ReaderScreen(book: book);
+                return ImportService.isEpub(book)
+                    ? EpubReaderScreen(book: book)
+                    : ReaderScreen(book: book);
               },
             ),
           ],
@@ -32,7 +37,7 @@ class App extends ConsumerWidget {
 
     return MaterialApp.router(
       debugShowCheckedModeBanner: false,
-      title: 'Lê-Livros',
+      title: 'StellaReader',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
         useMaterial3: true,
