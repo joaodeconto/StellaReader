@@ -1,31 +1,52 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:stellareader/main.dart';
+import 'package:stellareader/domain/book.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const App());
+  group('Book', () {
+    test('round-trips persisted PDF progress', () {
+      final book = Book(
+        id: 7,
+        title: 'Stella',
+        path: '/books/stella.pdf',
+        lastPage: 42,
+      );
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final restored = Book.fromMap(book.toMap());
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      expect(restored.id, 7);
+      expect(restored.title, 'Stella');
+      expect(restored.path, '/books/stella.pdf');
+      expect(restored.lastPage, 42);
+      expect(restored.lastCfi, isNull);
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('round-trips persisted EPUB progress', () {
+      final book = Book(
+        title: 'Alice',
+        path: '/books/alice.epub',
+        lastCfi: 'epubcfi(/6/4!/4/2/1:0)',
+      );
+
+      final restored = Book.fromMap(book.toMap());
+
+      expect(restored.lastPage, 1);
+      expect(restored.lastCfi, 'epubcfi(/6/4!/4/2/1:0)');
+    });
+
+    test('copyWith preserves values not explicitly changed', () {
+      final original = Book(
+        id: 3,
+        title: 'Original',
+        path: '/books/original.pdf',
+        lastPage: 8,
+      );
+
+      final updated = original.copyWith(lastPage: 9);
+
+      expect(updated.id, original.id);
+      expect(updated.title, original.title);
+      expect(updated.path, original.path);
+      expect(updated.lastPage, 9);
+    });
   });
 }
-
