@@ -10,6 +10,11 @@ import '../data/bookmark_repository.dart';
 import '../domain/book.dart';
 import '../domain/bookmark.dart';
 
+class _TocItem {
+  final String title;
+  const _TocItem(this.title);
+}
+
 class EpubReaderScreen extends ConsumerStatefulWidget {
   final Book book;
   const EpubReaderScreen({super.key, required this.book});
@@ -43,7 +48,6 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
       }
     };
     _controller.loadingState.addListener(_loadingListener);
-
     _controller.currentValueListenable.addListener(_onLocationChanged);
   }
 
@@ -124,13 +128,14 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   }
 
   String? _currentChapterLabel() {
-    final v = _controller.currentValueListenable.value;
-    final raw = v?.chapter?.Title?.trim();
+    final value = _controller.currentValueListenable.value;
+    final chapter = value?.chapter;
+    final raw = chapter?.Title?.toString().trim();
     if (raw == null || raw.isEmpty) return null;
 
     final cleaned = _cleanTitle(raw);
     final toc = _flattenTocSafe();
-    final idx = toc.indexWhere((t) => _norm(t.title) == _norm(raw));
+    final idx = toc.indexWhere((item) => _norm(item.title) == _norm(raw));
 
     final prefix = idx >= 0 ? 'Capítulo ${idx + 1} — ' : '';
     final text = cleaned.isEmpty
@@ -142,29 +147,25 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   String _norm(String s) =>
       s.replaceAll(RegExp(r'\s+'), ' ').trim().toLowerCase();
 
-  class _TocItem {
-    final String title;
-    _TocItem(this.title);
-  }
-
   List<_TocItem> _flattenTocSafe() {
     try {
       final toc = _controller.tableOfContents();
       final out = <_TocItem>[];
+
       void walk(dynamic node) {
         if (node == null) return;
         final title = (node.title ?? '').toString();
         if (title.trim().isNotEmpty) out.add(_TocItem(title));
         final children = node.subChapters as List<dynamic>?;
         if (children != null) {
-          for (final c in children) {
-            walk(c);
+          for (final child in children) {
+            walk(child);
           }
         }
       }
 
-      for (final n in toc) {
-        walk(n);
+      for (final node in toc) {
+        walk(node);
       }
       return out;
     } catch (_) {
@@ -173,24 +174,27 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
   }
 
   String _cleanTitle(String s) {
-    var r = s.replaceAll(RegExp(r'\s+'), ' ').trim();
-    final lowered = r.toLowerCase();
+    var result = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final lowered = result.toLowerCase();
     if (lowered.contains('project gutenberg') ||
         lowered.startsWith('chapter ') ||
         lowered.startsWith('capítulo ')) {
-      r = r.replaceFirst(
-          RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*',
-              caseSensitive: false),
-          '');
-      if (r.toLowerCase().contains('project gutenberg')) return '';
+      result = result.replaceFirst(
+        RegExp(
+          r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*',
+          caseSensitive: false,
+        ),
+        '',
+      );
+      if (result.toLowerCase().contains('project gutenberg')) return '';
     }
-    return r.trim();
+    return result.trim();
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      onPopInvoked: (didPop) => _saveLastLocation(),
+      onPopInvokedWithResult: (didPop, result) => _saveLastLocation(),
       child: Scaffold(
         appBar: AppBar(
           title: Text(widget.book.title),
@@ -198,14 +202,12 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
             IconButton(
               icon: const Icon(Icons.bookmarks_outlined),
               onPressed: _showBookmarks,
-            )
+            ),
           ],
         ),
         body: EpubView(
           controller: _controller,
-          onExternalLinkPressed: (href) async {
-            // use url_launcher here if desired
-          },
+          onExternalLinkPressed: (href) async {},
         ),
         floatingActionButton: FloatingActionButton(
           onPressed: _addBookmark,
