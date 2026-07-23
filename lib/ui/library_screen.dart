@@ -45,39 +45,33 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         valueListenable: AppSettings.themeMode,
         builder: (context, selectedMode, _) => AlertDialog(
           title: const Text('Settings'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Appearance', style: Theme.of(context).textTheme.titleSmall),
-              RadioListTile<ThemeMode>(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Use device setting'),
-                value: ThemeMode.system,
-                groupValue: selectedMode,
-                onChanged: (mode) {
-                  if (mode != null) AppSettings.setThemeMode(mode);
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Light'),
-                value: ThemeMode.light,
-                groupValue: selectedMode,
-                onChanged: (mode) {
-                  if (mode != null) AppSettings.setThemeMode(mode);
-                },
-              ),
-              RadioListTile<ThemeMode>(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Dark'),
-                value: ThemeMode.dark,
-                groupValue: selectedMode,
-                onChanged: (mode) {
-                  if (mode != null) AppSettings.setThemeMode(mode);
-                },
-              ),
-            ],
+          content: RadioGroup<ThemeMode>(
+            groupValue: selectedMode,
+            onChanged: (mode) {
+              if (mode != null) AppSettings.setThemeMode(mode);
+            },
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Appearance', style: Theme.of(context).textTheme.titleSmall),
+                const RadioListTile<ThemeMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Use device setting'),
+                  value: ThemeMode.system,
+                ),
+                const RadioListTile<ThemeMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Light'),
+                  value: ThemeMode.light,
+                ),
+                const RadioListTile<ThemeMode>(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text('Dark'),
+                  value: ThemeMode.dark,
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(
