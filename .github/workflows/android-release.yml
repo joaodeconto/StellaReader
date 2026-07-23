@@ -3,6 +3,8 @@ name: Android APK release
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -11,6 +13,7 @@ permissions:
 
 jobs:
   build-apk:
+    if: startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release]') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -40,11 +43,17 @@ jobs:
       - name: Build release APK
         run: flutter build apk --release
 
-      - name: Name APK
+      - name: Resolve release version
         shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME:-manual}"
-          cp build/app/outputs/flutter-apk/app-release.apk "StellaReader-${VERSION}.apk"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            RELEASE_TAG="$GITHUB_REF_NAME"
+          else
+            APP_VERSION="$(awk '/^version:/ {print $2}' pubspec.yaml | cut -d+ -f1)"
+            RELEASE_TAG="v${APP_VERSION}"
+          fi
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+          cp build/app/outputs/flutter-apk/app-release.apk "StellaReader-${RELEASE_TAG}.apk"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -54,8 +63,9 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: StellaReader ${{ env.RELEASE_TAG }}
           files: StellaReader-*.apk
           generate_release_notes: true
