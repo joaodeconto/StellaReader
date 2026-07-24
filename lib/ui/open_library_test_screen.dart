@@ -138,7 +138,8 @@ class _OpenLibraryTestScreenState extends State<OpenLibraryTestScreen> {
                         title: Text(book.title),
                         subtitle: Text(
                           [book.author, book.firstPublishYear]
-                              .where((value) => value != null && value!.isNotEmpty)
+                              .whereType<String>()
+                              .where((value) => value.isNotEmpty)
                               .join(' · '),
                         ),
                       );
