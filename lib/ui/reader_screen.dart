@@ -20,14 +20,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   late final PdfControllerPinch _controller;
   int _currentPage = 1;
   int _pageCount = 0;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
-    _currentPage = widget.book.lastPage;
+    _currentPage = widget.book.lastPage.clamp(1, 1000000);
     _controller = PdfControllerPinch(
       document: PdfDocument.openFile(widget.book.path),
-      initialPage: widget.book.lastPage,
+      initialPage: _currentPage,
     );
   }
 
@@ -147,9 +148,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
+    final surface = Theme.of(context).colorScheme.surface;
+
     return PopScope(
       onPopInvokedWithResult: (_, __) => _saveLastPage(),
       child: Scaffold(
+        extendBody: false,
         appBar: AppBar(
           title: Text(widget.book.title),
           actions: [
@@ -159,73 +164,90 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
           ],
         ),
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              Expanded(
-                child: ColoredBox(
-                  color: Colors.black,
-                  child: PdfViewPinch(
-                    controller: _controller,
-                    scrollDirection: Axis.horizontal,
-                    padding: 0,
-                    backgroundDecoration: const BoxDecoration(
-                      color: Colors.black,
-                    ),
-                    onDocumentLoaded: (document) {
-                      if (mounted) {
-                        setState(() => _pageCount = document.pagesCount);
-                      }
-                    },
-                    onPageChanged: (page) {
-                      if (mounted) setState(() => _currentPage = page);
-                    },
-                  ),
-                ),
-              ),
-              Material(
-                elevation: 8,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        tooltip: 'Previous page',
-                        onPressed: _currentPage > 1 ? _previousPage : null,
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                      Expanded(
-                        child: TextButton(
-                          onPressed: _jumpToPage,
-                          child: Text(
-                            _pageCount > 0
-                                ? 'Page $_currentPage of $_pageCount'
-                                : 'Page $_currentPage',
-                          ),
+        body: Column(
+          children: [
+            Expanded(
+              child: _loadError != null
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: SelectableText(
+                          'Could not open this PDF.\n\n$_loadError',
+                          textAlign: TextAlign.center,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Next page',
-                        onPressed: _pageCount == 0 || _currentPage < _pageCount
-                            ? _nextPage
-                            : null,
-                        icon: const Icon(Icons.chevron_right),
+                    )
+                  : ColoredBox(
+                      color: Colors.black,
+                      child: PdfViewPinch(
+                        controller: _controller,
+                        onDocumentLoaded: (document) {
+                          if (mounted) {
+                            setState(() {
+                              _pageCount = document.pagesCount;
+                              _loadError = null;
+                            });
+                          }
+                        },
+                        onDocumentError: (error) {
+                          if (mounted) {
+                            setState(() => _loadError = error.toString());
+                          }
+                        },
+                        onPageChanged: (page) {
+                          if (mounted) setState(() => _currentPage = page);
+                        },
                       ),
-                      IconButton(
-                        tooltip: 'Bookmark page',
-                        onPressed: _addBookmark,
-                        icon: const Icon(Icons.star_outline),
-                      ),
-                    ],
+                    ),
+            ),
+            ColoredBox(
+              color: surface,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: bottomInset),
+                child: Material(
+                  color: surface,
+                  elevation: 8,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Previous page',
+                          onPressed: _currentPage > 1 ? _previousPage : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: _jumpToPage,
+                            child: Text(
+                              _pageCount > 0
+                                  ? 'Page $_currentPage of $_pageCount'
+                                  : 'Page $_currentPage',
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Next page',
+                          onPressed: _pageCount == 0 || _currentPage < _pageCount
+                              ? _nextPage
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                        IconButton(
+                          tooltip: 'Bookmark page',
+                          onPressed: _addBookmark,
+                          icon: const Icon(Icons.star_outline),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
