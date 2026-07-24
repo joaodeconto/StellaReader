@@ -45,10 +45,15 @@ class OpenLibraryBook {
 }
 
 class OpenLibraryDownload {
-  const OpenLibraryDownload({required this.url, required this.extension});
+  const OpenLibraryDownload({
+    required this.url,
+    required this.extension,
+    required this.sizeBytes,
+  });
 
   final String url;
   final String extension;
+  final int sizeBytes;
 }
 
 class OpenLibraryService {
@@ -59,7 +64,7 @@ class OpenLibraryService {
                 connectTimeout: const Duration(seconds: 12),
                 receiveTimeout: const Duration(seconds: 25),
                 followRedirects: true,
-                headers: const {'User-Agent': 'StellaReader/0.3.0'},
+                headers: const {'User-Agent': 'StellaReader/0.3.1'},
               ),
             );
 
@@ -88,7 +93,7 @@ class OpenLibraryService {
   }
 
   Future<OpenLibraryDownload?> resolveDownload(OpenLibraryBook book) async {
-    for (final archiveId in book.archiveIds.take(4)) {
+    for (final archiveId in book.archiveIds.take(6)) {
       final response = await _dio.get<Map<String, dynamic>>(
         'https://archive.org/metadata/$archiveId',
       );
@@ -97,37 +102,92 @@ class OpenLibraryService {
 
       final candidates = files
           .whereType<Map<String, dynamic>>()
-          .map((file) => file['name']?.toString())
-          .whereType<String>()
-          .where((name) {
-            final lower = name.toLowerCase();
-            return lower.endsWith('.epub') || lower.endsWith('.pdf');
-          })
-          .toList();
+          .map(_DownloadCandidate.fromJson)
+          .whereType<_DownloadCandidate>()
+          .where((file) => file.isUsable)
+          .toList()
+        ..sort((a, b) => b.score.compareTo(a.score));
 
-      String? selected;
-      for (final name in candidates) {
-        if (name.toLowerCase().endsWith('.epub')) {
-          selected = name;
-          break;
-        }
-      }
-      selected ??= candidates.cast<String?>().firstOrNull;
-      if (selected == null) continue;
-
-      final encodedName = selected
+      if (candidates.isEmpty) continue;
+      final selected = candidates.first;
+      final encodedName = selected.name
           .split('/')
           .map(Uri.encodeComponent)
           .join('/');
+
       return OpenLibraryDownload(
         url: 'https://archive.org/download/$archiveId/$encodedName',
-        extension: selected.toLowerCase().endsWith('.pdf') ? '.pdf' : '.epub',
+        extension: selected.extension,
+        sizeBytes: selected.sizeBytes,
       );
     }
     return null;
   }
 }
 
-extension _FirstOrNull<T> on Iterable<T> {
-  T? get firstOrNull => isEmpty ? null : first;
+class _DownloadCandidate {
+  const _DownloadCandidate({
+    required this.name,
+    required this.extension,
+    required this.sizeBytes,
+    required this.format,
+  });
+
+  static _DownloadCandidate? fromJson(Map<String, dynamic> json) {
+    final name = json['name']?.toString();
+    if (name == null || name.isEmpty) return null;
+    final lower = name.toLowerCase();
+    final extension = lower.endsWith('.pdf')
+        ? '.pdf'
+        : lower.endsWith('.epub')
+            ? '.epub'
+            : null;
+    if (extension == null) return null;
+
+    final rawSize = json['size'];
+    final size = rawSize is int
+        ? rawSize
+        : int.tryParse(rawSize?.toString() ?? '') ?? 0;
+
+    return _DownloadCandidate(
+      name: name,
+      extension: extension,
+      sizeBytes: size,
+      format: json['format']?.toString().toLowerCase() ?? '',
+    );
+  }
+
+  final String name;
+  final String extension;
+  final int sizeBytes;
+  final String format;
+
+  bool get isUsable {
+    final lower = name.toLowerCase();
+    const rejectedTokens = [
+      'meta',
+      'metadata',
+      'readme',
+      'notice',
+      'disclaimer',
+      'restricted',
+      'encrypted',
+      'preview',
+      'sample',
+      'placeholder',
+    ];
+    if (rejectedTokens.any(lower.contains)) return false;
+    if (extension == '.epub' && sizeBytes < 80 * 1024) return false;
+    if (extension == '.pdf' && sizeBytes < 120 * 1024) return false;
+    return true;
+  }
+
+  int get score {
+    var value = extension == '.epub' ? 200 : 160;
+    if (format.contains('epub')) value += 30;
+    if (format.contains('pdf')) value += 20;
+    if (name.toLowerCase().contains('text')) value += 10;
+    if (sizeBytes > 0) value += (sizeBytes ~/ (1024 * 1024)).clamp(0, 80);
+    return value;
+  }
 }
