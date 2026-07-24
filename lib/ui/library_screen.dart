@@ -9,6 +9,7 @@ import '../data/import_service.dart';
 import '../domain/book.dart';
 import '../settings/app_settings.dart';
 import 'discover_screen.dart';
+import 'open_library_test_screen.dart';
 
 final booksProvider = FutureProvider.autoDispose<List<Book>>((ref) async {
   return BookRepository().all();
@@ -100,6 +101,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   Future<void> _handleMenu(String value) async {
     switch (value) {
+      case 'network-test':
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const OpenLibraryTestScreen(),
+          ),
+        );
       case 'settings':
         await _showSettings();
       case 'about':
@@ -132,6 +139,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             tooltip: 'App menu',
             onSelected: _handleMenu,
             itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'network-test',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.public),
+                  title: Text('Open Library test'),
+                ),
+              ),
               PopupMenuItem(
                 value: 'settings',
                 child: ListTile(
