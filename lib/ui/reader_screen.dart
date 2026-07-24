@@ -62,6 +62,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!mounted) return;
     showModalBottomSheet<void>(
       context: context,
+      useSafeArea: true,
       builder: (sheetContext) => ListView(
         children: items.isEmpty
             ? const [ListTile(title: Text('No bookmarks'))]
@@ -120,12 +121,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   }
 
   void _previousPage() {
-    if (_currentPage > 1) _controller.previousPage(duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+    if (_currentPage > 1) {
+      _controller.previousPage(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   void _nextPage() {
     if (_pageCount == 0 || _currentPage < _pageCount) {
-      _controller.nextPage(duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+      _controller.nextPage(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
     }
   }
 
@@ -150,25 +159,38 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
           ],
         ),
-        body: Column(
-          children: [
-            Expanded(
-              child: PdfViewPinch(
-                controller: _controller,
-                onDocumentLoaded: (document) {
-                  if (mounted) setState(() => _pageCount = document.pagesCount);
-                },
-                onPageChanged: (page) {
-                  if (mounted) setState(() => _currentPage = page);
-                },
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              Expanded(
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: PdfViewPinch(
+                    controller: _controller,
+                    scrollDirection: Axis.horizontal,
+                    padding: 0,
+                    backgroundDecoration: const BoxDecoration(
+                      color: Colors.black,
+                    ),
+                    onDocumentLoaded: (document) {
+                      if (mounted) {
+                        setState(() => _pageCount = document.pagesCount);
+                      }
+                    },
+                    onPageChanged: (page) {
+                      if (mounted) setState(() => _currentPage = page);
+                    },
+                  ),
+                ),
               ),
-            ),
-            SafeArea(
-              top: false,
-              child: Material(
+              Material(
                 elevation: 8,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
                   child: Row(
                     children: [
                       IconButton(
@@ -202,8 +224,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
