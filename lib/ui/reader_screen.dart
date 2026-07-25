@@ -17,7 +17,7 @@ class ReaderScreen extends ConsumerStatefulWidget {
 }
 
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
-  late final PdfControllerPinch _controller;
+  late final PdfController _controller;
   int _currentPage = 1;
   int _pageCount = 0;
   String? _loadError;
@@ -26,9 +26,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void initState() {
     super.initState();
     _currentPage = widget.book.lastPage.clamp(1, 1000000);
-    _controller = PdfControllerPinch(
+    _controller = PdfController(
       document: PdfDocument.openFile(widget.book.path),
       initialPage: _currentPage,
+      viewportFraction: 1,
     );
   }
 
@@ -179,8 +180,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     )
                   : ColoredBox(
                       color: Colors.black,
-                      child: PdfViewPinch(
+                      child: PdfView(
                         controller: _controller,
+                        scrollDirection: Axis.horizontal,
+                        pageSnapping: true,
+                        physics: const PageScrollPhysics(),
+                        backgroundDecoration: const BoxDecoration(
+                          color: Colors.black,
+                        ),
                         onDocumentLoaded: (document) {
                           if (mounted) {
                             setState(() {
