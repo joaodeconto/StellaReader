@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdfx/pdfx.dart';
 
@@ -21,6 +22,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   int _currentPage = 1;
   int _pageCount = 0;
   String? _loadError;
+  bool _controlsVisible = false;
 
   @override
   void initState() {
@@ -31,6 +33,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       initialPage: _currentPage,
       viewportFraction: 1,
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applySystemUi());
+  }
+
+  Future<void> _applySystemUi() async {
+    if (_controlsVisible) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    }
+  }
+
+  void _toggleControls() {
+    setState(() => _controlsVisible = !_controlsVisible);
+    _applySystemUi();
   }
 
   Future<void> _saveLastPage() async {
@@ -62,30 +78,44 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (id == null) return;
     final items = await BookmarkRepository().byBook(id);
     if (!mounted) return;
-    showModalBottomSheet<void>(
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
-      builder: (sheetContext) => ListView(
-        children: items.isEmpty
-            ? const [ListTile(title: Text('No bookmarks'))]
-            : items
-                .map(
-                  (bookmark) => ListTile(
-                    leading: const Icon(Icons.bookmark),
-                    title: Text('Page ${bookmark.page}'),
-                    onTap: () {
-                      _controller.jumpToPage(bookmark.page);
-                      Navigator.pop(sheetContext);
-                    },
-                  ),
-                )
-                .toList(),
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * .65,
+          ),
+          child: ListView(
+            shrinkWrap: true,
+            children: items.isEmpty
+                ? const [ListTile(title: Text('No bookmarks'))]
+                : items
+                    .map(
+                      (bookmark) => ListTile(
+                        leading: const Icon(Icons.bookmark),
+                        title: Text('Page ${bookmark.page}'),
+                        onTap: () {
+                          _controller.jumpToPage(bookmark.page);
+                          Navigator.pop(sheetContext);
+                        },
+                      ),
+                    )
+                    .toList(),
+          ),
+        ),
       ),
     );
+    await _applySystemUi();
   }
 
   Future<void> _jumpToPage() async {
     final input = TextEditingController(text: '$_currentPage');
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    if (!mounted) return;
     final selected = await showDialog<int>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -117,6 +147,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
     );
     input.dispose();
+    await _applySystemUi();
     if (selected == null) return;
     final page = _pageCount > 0 ? selected.clamp(1, _pageCount) : selected;
     if (page >= 1) _controller.jumpToPage(page);
@@ -144,116 +175,124 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void dispose() {
     _saveLastPage();
     _controller.dispose();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
     final surface = Theme.of(context).colorScheme.surface;
 
     return PopScope(
       onPopInvokedWithResult: (_, __) => _saveLastPage(),
       child: Scaffold(
-        extendBody: false,
-        appBar: AppBar(
-          title: Text(widget.book.title),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.bookmarks_outlined),
-              onPressed: _showBookmarks,
-            ),
-          ],
-        ),
-        body: Column(
+        backgroundColor: Colors.black,
+        extendBody: true,
+        appBar: _controlsVisible
+            ? AppBar(
+                title: Text(widget.book.title),
+                actions: [
+                  IconButton(
+                    tooltip: 'Bookmarks',
+                    icon: const Icon(Icons.bookmarks_outlined),
+                    onPressed: _showBookmarks,
+                  ),
+                  IconButton(
+                    tooltip: 'Hide controls',
+                    icon: const Icon(Icons.fullscreen),
+                    onPressed: _toggleControls,
+                  ),
+                ],
+              )
+            : null,
+        body: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
-              child: _loadError != null
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: SelectableText(
-                          'Could not open this PDF.\n\n$_loadError',
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    )
-                  : ColoredBox(
-                      color: Colors.black,
-                      child: PdfView(
-                        controller: _controller,
-                        scrollDirection: Axis.horizontal,
-                        pageSnapping: true,
-                        physics: const PageScrollPhysics(),
-                        backgroundDecoration: const BoxDecoration(
-                          color: Colors.black,
-                        ),
-                        onDocumentLoaded: (document) {
-                          if (mounted) {
-                            setState(() {
-                              _pageCount = document.pagesCount;
-                              _loadError = null;
-                            });
-                          }
-                        },
-                        onDocumentError: (error) {
-                          if (mounted) {
-                            setState(() => _loadError = error.toString());
-                          }
-                        },
-                        onPageChanged: (page) {
-                          if (mounted) setState(() => _currentPage = page);
-                        },
-                      ),
-                    ),
-            ),
-            ColoredBox(
-              color: surface,
-              child: Padding(
-                padding: EdgeInsets.only(bottom: bottomInset),
-                child: Material(
-                  color: surface,
-                  elevation: 8,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Previous page',
-                          onPressed: _currentPage > 1 ? _previousPage : null,
-                          icon: const Icon(Icons.chevron_left),
-                        ),
-                        Expanded(
-                          child: TextButton(
-                            onPressed: _jumpToPage,
-                            child: Text(
-                              _pageCount > 0
-                                  ? 'Page $_currentPage of $_pageCount'
-                                  : 'Page $_currentPage',
+            if (_loadError != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Could not open this PDF.',
+                    style: const TextStyle(color: Colors.white),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              )
+            else
+              GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _toggleControls,
+                child: ColoredBox(
+                  color: Colors.black,
+                  child: PdfView(
+                    controller: _controller,
+                    scrollDirection: Axis.horizontal,
+                    pageSnapping: true,
+                    physics: const PageScrollPhysics(),
+                    backgroundDecoration: const BoxDecoration(color: Colors.black),
+                    onDocumentLoaded: (document) {
+                      if (mounted) {
+                        setState(() {
+                          _pageCount = document.pagesCount;
+                          _loadError = null;
+                        });
+                      }
+                    },
+                    onDocumentError: (error) {
+                      if (mounted) setState(() => _loadError = error.toString());
+                    },
+                    onPageChanged: (page) {
+                      if (mounted) setState(() => _currentPage = page);
+                    },
+                  ),
+                ),
+              ),
+            if (_controlsVisible)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: SafeArea(
+                  top: false,
+                  child: Material(
+                    color: surface,
+                    elevation: 8,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            tooltip: 'Previous page',
+                            onPressed: _currentPage > 1 ? _previousPage : null,
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                          Expanded(
+                            child: TextButton(
+                              onPressed: _jumpToPage,
+                              child: Text(
+                                _pageCount > 0
+                                    ? 'Page $_currentPage of $_pageCount'
+                                    : 'Page $_currentPage',
+                              ),
                             ),
                           ),
-                        ),
-                        IconButton(
-                          tooltip: 'Next page',
-                          onPressed: _pageCount == 0 || _currentPage < _pageCount
-                              ? _nextPage
-                              : null,
-                          icon: const Icon(Icons.chevron_right),
-                        ),
-                        IconButton(
-                          tooltip: 'Bookmark page',
-                          onPressed: _addBookmark,
-                          icon: const Icon(Icons.star_outline),
-                        ),
-                      ],
+                          IconButton(
+                            tooltip: 'Next page',
+                            onPressed: _pageCount == 0 || _currentPage < _pageCount
+                                ? _nextPage
+                                : null,
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                          IconButton(
+                            tooltip: 'Bookmark page',
+                            onPressed: _addBookmark,
+                            icon: const Icon(Icons.star_outline),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
