@@ -64,7 +64,7 @@ class OpenLibraryService {
                 connectTimeout: const Duration(seconds: 12),
                 receiveTimeout: const Duration(seconds: 25),
                 followRedirects: true,
-                headers: const {'User-Agent': 'StellaReader/0.3.2'},
+                headers: const {'User-Agent': 'StellaReader/0.3.3'},
               ),
             );
 
@@ -97,60 +97,104 @@ class OpenLibraryService {
       final response = await _dio.get<Map<String, dynamic>>(
         'https://archive.org/metadata/$archiveId',
       );
+      final metadata = response.data?['metadata'];
+      if (metadata is Map<String, dynamic> && _isRestricted(metadata)) continue;
+
       final files = response.data?['files'];
       if (files is! List) continue;
 
       final candidates = files
           .whereType<Map<String, dynamic>>()
-          .map(_PdfCandidate.fromJson)
-          .whereType<_PdfCandidate>()
+          .map(_BookCandidate.fromJson)
+          .whereType<_BookCandidate>()
           .where((file) => file.isUsable)
           .toList()
         ..sort((a, b) => b.score.compareTo(a.score));
 
-      if (candidates.isEmpty) continue;
-      final selected = candidates.first;
-      final encodedName = selected.name
-          .split('/')
-          .map(Uri.encodeComponent)
-          .join('/');
+      for (final candidate in candidates.take(6)) {
+        final encodedName = candidate.name
+            .split('/')
+            .map(Uri.encodeComponent)
+            .join('/');
+        final url = 'https://archive.org/download/$archiveId/$encodedName';
+        if (!await _isPubliclyAccessible(url)) continue;
 
-      return OpenLibraryDownload(
-        url: 'https://archive.org/download/$archiveId/$encodedName',
-        extension: '.pdf',
-        sizeBytes: selected.sizeBytes,
-      );
+        return OpenLibraryDownload(
+          url: url,
+          extension: candidate.extension,
+          sizeBytes: candidate.sizeBytes,
+        );
+      }
     }
     return null;
   }
+
+  bool _isRestricted(Map<String, dynamic> metadata) {
+    final access = [
+      metadata['access-restricted-item'],
+      metadata['accessrestricteditem'],
+      metadata['is_dark'],
+    ].map((value) => value?.toString().toLowerCase()).toList();
+    return access.any((value) => value == 'true' || value == '1');
+  }
+
+  Future<bool> _isPubliclyAccessible(String url) async {
+    try {
+      final response = await _dio.get<List<int>>(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: const {
+            'Range': 'bytes=0-0',
+            'User-Agent': 'StellaReader/0.3.3',
+          },
+          validateStatus: (status) => status != null && status < 500,
+          receiveTimeout: const Duration(seconds: 15),
+        ),
+      );
+      return response.statusCode == 200 || response.statusCode == 206;
+    } on DioException {
+      return false;
+    }
+  }
 }
 
-class _PdfCandidate {
-  const _PdfCandidate({
+class _BookCandidate {
+  const _BookCandidate({
     required this.name,
     required this.sizeBytes,
     required this.format,
+    required this.extension,
   });
 
-  static _PdfCandidate? fromJson(Map<String, dynamic> json) {
+  static _BookCandidate? fromJson(Map<String, dynamic> json) {
     final name = json['name']?.toString();
-    if (name == null || !name.toLowerCase().endsWith('.pdf')) return null;
+    if (name == null) return null;
+    final lower = name.toLowerCase();
+    final extension = lower.endsWith('.epub')
+        ? '.epub'
+        : lower.endsWith('.pdf')
+            ? '.pdf'
+            : null;
+    if (extension == null) return null;
 
     final rawSize = json['size'];
     final size = rawSize is int
         ? rawSize
         : int.tryParse(rawSize?.toString() ?? '') ?? 0;
 
-    return _PdfCandidate(
+    return _BookCandidate(
       name: name,
       sizeBytes: size,
       format: json['format']?.toString().toLowerCase() ?? '',
+      extension: extension,
     );
   }
 
   final String name;
   final int sizeBytes;
   final String format;
+  final String extension;
 
   bool get isUsable {
     final lower = name.toLowerCase();
@@ -169,20 +213,21 @@ class _PdfCandidate {
       'scandata',
     ];
     if (rejectedTokens.any(lower.contains)) return false;
-    if (sizeBytes < 300 * 1024) return false;
+    if (sizeBytes < 100 * 1024) return false;
     return true;
   }
 
   int get score {
     var value = 100;
     final lower = name.toLowerCase();
-    if (format.contains('text pdf')) value += 80;
-    if (format == 'pdf') value += 40;
+    if (extension == '.epub') value += 250;
+    if (format.contains('text pdf')) value += 120;
+    if (format == 'pdf') value += 50;
     if (lower.contains('text')) value += 30;
     if (lower.contains('bw')) value -= 10;
     if (lower.contains('color')) value += 5;
     if (sizeBytes > 0) {
-      value += (sizeBytes ~/ (1024 * 1024)).clamp(0, 120);
+      value -= (sizeBytes ~/ (20 * 1024 * 1024)).clamp(0, 80);
     }
     return value;
   }
