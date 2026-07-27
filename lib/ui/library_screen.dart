@@ -8,8 +8,6 @@ import '../data/book_repository.dart';
 import '../data/import_service.dart';
 import '../domain/book.dart';
 import '../settings/app_settings.dart';
-import 'discover_screen.dart';
-import 'open_library_test_screen.dart';
 
 final booksProvider = FutureProvider.autoDispose<List<Book>>((ref) async {
   return BookRepository().all();
@@ -23,8 +21,6 @@ class LibraryScreen extends ConsumerStatefulWidget {
 }
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
-  int _tab = 0;
-
   Future<void> _import() async {
     try {
       final book = await ImportService().pickAndImport();
@@ -94,19 +90,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       applicationVersion: '${info.version} (build ${info.buildNumber})',
       applicationIcon: const Icon(Icons.auto_stories, size: 48),
       children: const [
-        Text('A focused Android reader for local PDF and EPUB books, with public-domain catalog discovery.'),
+        Text('A focused Android reader for PDF and EPUB books already on your device.'),
       ],
     );
   }
 
   Future<void> _handleMenu(String value) async {
     switch (value) {
-      case 'network-test':
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => const OpenLibraryTestScreen(),
-          ),
-        );
       case 'settings':
         await _showSettings();
       case 'about':
@@ -131,26 +121,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     }
 
     final books = ref.watch(booksProvider);
-    final bottomInset = MediaQuery.viewPaddingOf(context).bottom;
-    final surface = Theme.of(context).colorScheme.surface;
 
     return Scaffold(
-      extendBody: false,
       appBar: AppBar(
-        title: Text(_tab == 0 ? 'Library' : 'Discover'),
+        title: const Text('Library'),
         actions: [
+          IconButton(
+            tooltip: 'Import PDF or EPUB',
+            onPressed: _import,
+            icon: const Icon(Icons.file_open_outlined),
+          ),
           PopupMenuButton<String>(
             tooltip: 'App menu',
             onSelected: _handleMenu,
             itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'network-test',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.public),
-                  title: Text('Open Library test'),
-                ),
-              ),
               PopupMenuItem(
                 value: 'settings',
                 child: ListTile(
@@ -171,69 +155,130 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _tab,
-        children: [
-          books.when(
-            data: (items) => items.isEmpty
-                ? const Center(
-                    child: Text('No books yet. Tap + to import PDF or EPUB.'),
-                  )
-                : ListView.separated(
-                    itemCount: items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (_, index) {
-                      final book = items[index];
-                      final epub = ImportService.isEpub(book);
-                      return ListTile(
-                        leading: Icon(epub ? Icons.auto_stories : Icons.picture_as_pdf),
-                        title: Text(book.title),
-                        subtitle: Text(
-                          epub
-                              ? 'EPUB · reading position saved'
-                              : 'PDF · last page ${book.lastPage}',
-                        ),
-                        onTap: () => context.push('/reader', extra: book),
-                      );
-                    },
-                  ),
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (error, _) => Center(child: Text('Error: $error')),
-          ),
-          DiscoverScreen(
-            onImported: (book) {
-              ref.invalidate(booksProvider);
-              context.push('/reader', extra: book);
-            },
-          ),
-        ],
+      body: books.when(
+        data: (items) => items.isEmpty
+            ? _EmptyLibrary(onImport: _import)
+            : RefreshIndicator(
+                onRefresh: () async => ref.refresh(booksProvider.future),
+                child: ListView.separated(
+                  padding: const EdgeInsets.only(bottom: 96),
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (_, index) {
+                    final book = items[index];
+                    final epub = ImportService.isEpub(book);
+                    return ListTile(
+                      leading: Icon(
+                        epub ? Icons.auto_stories : Icons.picture_as_pdf,
+                        size: 32,
+                      ),
+                      title: Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        epub
+                            ? 'EPUB · tap to continue reading'
+                            : 'PDF · last page ${book.lastPage}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => context.push('/reader', extra: book),
+                    );
+                  },
+                ),
+              ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, _) => _LibraryError(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(booksProvider),
+        ),
       ),
-      floatingActionButton: _tab == 0
-          ? FloatingActionButton(
-              onPressed: _import,
-              child: const Icon(Icons.add),
-            )
-          : null,
-      bottomNavigationBar: ColoredBox(
-        color: surface,
-        child: Padding(
-          padding: EdgeInsets.only(bottom: bottomInset),
-          child: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: (value) => setState(() => _tab = value),
-            destinations: const [
-              NavigationDestination(
-                icon: Icon(Icons.library_books_outlined),
-                selectedIcon: Icon(Icons.library_books),
-                label: 'Library',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.explore_outlined),
-                selectedIcon: Icon(Icons.explore),
-                label: 'Discover',
-              ),
-            ],
-          ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _import,
+        icon: const Icon(Icons.add),
+        label: const Text('Add book'),
+      ),
+    );
+  }
+}
+
+class _EmptyLibrary extends StatelessWidget {
+  const _EmptyLibrary({required this.onImport});
+
+  final VoidCallback onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.menu_book_outlined,
+              size: 72,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Your books belong here',
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Choose a real PDF or EPUB from this device. StellaReader keeps your reading position and opens it again from the Library.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: onImport,
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text('Choose a book'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LibraryError extends StatelessWidget {
+  const _LibraryError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 48),
+            const SizedBox(height: 12),
+            const Text(
+              'The Library could not be loaded.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try again'),
+            ),
+          ],
         ),
       ),
     );
