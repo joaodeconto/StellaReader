@@ -22,7 +22,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final _controller = TextEditingController(text: 'classic literature');
   final _service = OpenLibraryService();
   final _dio = Dio();
-  final Set<String> _downloading = <String>{};
+  final Map<String, double?> _downloadProgress = <String, double?>{};
 
   bool _loading = false;
   bool _readableOnly = true;
@@ -54,17 +54,17 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final books = await _service.search(query);
       if (!mounted) return;
       setState(() => _books = books);
-    } on DioException catch (error) {
+    } on DioException {
       if (!mounted) return;
       setState(() {
         _books = const [];
-        _error = 'Network ${error.type.name}: ${error.message ?? 'request failed'}';
+        _error = 'Check your connection and try again.';
       });
-    } catch (error) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _books = const [];
-        _error = '${error.runtimeType}: $error';
+        _error = 'The catalog could not be loaded.';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -76,84 +76,123 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       : _books;
 
   Future<void> _download(OpenLibraryBook item) async {
-    if (_downloading.contains(item.workKey)) return;
+    if (_downloadProgress.containsKey(item.workKey)) return;
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _downloading.add(item.workKey));
+    setState(() => _downloadProgress[item.workKey] = null);
 
+    File? tempFile;
     try {
       final download = await _service.resolveDownload(item);
       if (download == null) {
-        throw StateError('No downloadable EPUB or PDF was found.');
+        _showMessage(
+          'No public EPUB or PDF edition is available for this book.',
+          actionLabel: 'Search again',
+          onAction: _search,
+        );
+        return;
       }
 
       final temp = await getTemporaryDirectory();
       final safeTitle = item.title.replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_');
-      final tempFile = File(p.join(temp.path, '$safeTitle${download.extension}'));
+      tempFile = File(p.join(temp.path, '$safeTitle${download.extension}'));
       await _dio.download(
         download.url,
         tempFile.path,
         options: Options(
           receiveTimeout: const Duration(minutes: 3),
-          headers: const {'User-Agent': 'StellaReader/0.3.0'},
+          headers: const {'User-Agent': 'StellaReader/0.3.3'},
         ),
+        onReceiveProgress: (received, total) {
+          if (!mounted || total <= 0) return;
+          setState(() => _downloadProgress[item.workKey] = received / total);
+        },
       );
 
       final imported = await ImportService().importFile(tempFile);
-      await tempFile.delete().catchError((_) => tempFile);
       widget.onImported(imported);
       if (mounted) {
         messenger.showSnackBar(
           SnackBar(content: Text('${item.title} added to Library')),
         );
       }
-    } catch (error) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(content: Text('Download failed: $error')),
-        );
-      }
+    } on DioException catch (error) {
+      final status = error.response?.statusCode;
+      final message = status == 401 || status == 403
+          ? 'This edition requires login or borrowing and cannot be downloaded here.'
+          : 'The download failed. Try another edition or try again later.';
+      _showMessage(message);
+    } catch (_) {
+      _showMessage('This file could not be added to the Library.');
     } finally {
-      if (mounted) setState(() => _downloading.remove(item.workKey));
+      if (tempFile != null && await tempFile.exists()) {
+        await tempFile.delete().catchError((_) => tempFile!);
+      }
+      if (mounted) setState(() => _downloadProgress.remove(item.workKey));
     }
   }
 
-  void _showDetails(OpenLibraryBook book) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(book.title, style: Theme.of(context).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            Text(book.author),
-            if (book.firstPublishYear != null)
-              Text('First published ${book.firstPublishYear}'),
-            const SizedBox(height: 16),
-            Text(
-              book.mayBeDownloadable
-                  ? 'A public full-text edition may be available through the Internet Archive.'
-                  : 'No public EPUB or PDF is currently listed for this result.',
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: book.mayBeDownloadable
-                    ? () {
-                        Navigator.pop(context);
-                        _download(book);
-                      }
-                    : null,
-                icon: const Icon(Icons.download_outlined),
-                label: const Text('Download to Library'),
-              ),
-            ),
-          ],
+  void _showMessage(
+    String message, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          action: actionLabel == null || onAction == null
+              ? null
+              : SnackBarAction(label: actionLabel, onPressed: onAction),
         ),
+      );
+  }
+
+  Future<void> _showDetails(OpenLibraryBook book) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        icon: _BookCover(url: book.coverUrl, width: 72, height: 100),
+        title: Text(book.title, textAlign: TextAlign.center),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                [book.author, book.firstPublishYear]
+                    .whereType<String>()
+                    .where((value) => value.isNotEmpty)
+                    .join(' · '),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                book.mayBeDownloadable
+                    ? 'StellaReader will look for a public EPUB or PDF edition. Restricted editions are skipped.'
+                    : 'No public full-text edition is listed for this result.',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton.icon(
+            onPressed: book.mayBeDownloadable
+                ? () {
+                    Navigator.pop(dialogContext);
+                    _download(book);
+                  }
+                : null,
+            icon: const Icon(Icons.download_outlined),
+            label: const Text('Download'),
+          ),
+        ],
       ),
     );
   }
@@ -161,99 +200,115 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     final books = _visibleBooks;
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Column(
-            children: [
-              SearchBar(
-                controller: _controller,
-                hintText: 'Search title or author',
-                leading: const Icon(Icons.search),
-                trailing: [
-                  IconButton(
-                    tooltip: 'Search',
-                    onPressed: _loading ? null : _search,
-                    icon: const Icon(Icons.arrow_forward),
-                  ),
-                ],
-                onSubmitted: (_) => _search(),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  FilterChip(
-                    label: const Text('Downloadable only'),
-                    selected: _readableOnly,
-                    onSelected: (value) => setState(() => _readableOnly = value),
-                  ),
-                  const Spacer(),
-                  if (!_loading && _books.isNotEmpty)
-                    Text('${books.length} shown'),
-                ],
-              ),
-            ],
-          ),
-        ),
-        if (_loading) const LinearProgressIndicator(),
-        Expanded(
-          child: _error != null
-              ? _ErrorState(message: _error!, onRetry: _search)
-              : books.isEmpty && !_loading
-                  ? const _EmptyState()
-                  : RefreshIndicator(
-                      onRefresh: _search,
-                      child: ListView.separated(
-                        itemCount: books.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final book = books[index];
-                          final downloading = _downloading.contains(book.workKey);
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                            leading: _BookCover(url: book.coverUrl),
-                            title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                            subtitle: Text(
-                              [book.author, book.firstPublishYear]
-                                  .whereType<String>()
-                                  .where((value) => value.isNotEmpty)
-                                  .join(' · '),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            trailing: downloading
-                                ? const SizedBox.square(
-                                    dimension: 24,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : Icon(
-                                    book.mayBeDownloadable
-                                        ? Icons.download_outlined
-                                        : Icons.info_outline,
-                                  ),
-                            onTap: () => _showDetails(book),
-                          );
-                        },
-                      ),
+    return SafeArea(
+      top: false,
+      bottom: false,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: Column(
+              children: [
+                SearchBar(
+                  controller: _controller,
+                  hintText: 'Search title or author',
+                  leading: const Icon(Icons.search),
+                  trailing: [
+                    IconButton(
+                      tooltip: 'Search',
+                      onPressed: _loading ? null : _search,
+                      icon: const Icon(Icons.arrow_forward),
                     ),
-        ),
-      ],
+                  ],
+                  onSubmitted: (_) => _search(),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    FilterChip(
+                      label: const Text('Downloadable only'),
+                      selected: _readableOnly,
+                      onSelected: (value) => setState(() => _readableOnly = value),
+                    ),
+                    const Spacer(),
+                    if (!_loading && _books.isNotEmpty)
+                      Text('${books.length} shown'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          if (_loading) const LinearProgressIndicator(),
+          Expanded(
+            child: _error != null
+                ? _ErrorState(message: _error!, onRetry: _search)
+                : books.isEmpty && !_loading
+                    ? const _EmptyState()
+                    : RefreshIndicator(
+                        onRefresh: _search,
+                        child: ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          itemCount: books.length,
+                          separatorBuilder: (_, __) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final book = books[index];
+                            final downloading = _downloadProgress.containsKey(book.workKey);
+                            final progress = _downloadProgress[book.workKey];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              leading: _BookCover(url: book.coverUrl),
+                              title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    [book.author, book.firstPublishYear]
+                                        .whereType<String>()
+                                        .where((value) => value.isNotEmpty)
+                                        .join(' · '),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (downloading) ...[
+                                    const SizedBox(height: 8),
+                                    LinearProgressIndicator(value: progress),
+                                  ],
+                                ],
+                              ),
+                              trailing: downloading
+                                  ? Text(progress == null ? 'Preparing' : '${(progress * 100).round()}%')
+                                  : Icon(
+                                      book.mayBeDownloadable
+                                          ? Icons.download_outlined
+                                          : Icons.info_outline,
+                                    ),
+                              onTap: downloading ? null : () => _showDetails(book),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _BookCover extends StatelessWidget {
-  const _BookCover({required this.url});
+  const _BookCover({required this.url, this.width = 48, this.height = 68});
+
   final String? url;
+  final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: SizedBox(
-        width: 44,
-        height: 60,
+        width: width,
+        height: height,
         child: url == null
             ? ColoredBox(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -288,6 +343,7 @@ class _EmptyState extends StatelessWidget {
 
 class _ErrorState extends StatelessWidget {
   const _ErrorState({required this.message, required this.onRetry});
+
   final String message;
   final VoidCallback onRetry;
 
@@ -303,7 +359,7 @@ class _ErrorState extends StatelessWidget {
             const SizedBox(height: 12),
             const Text('Could not load Open Library'),
             const SizedBox(height: 8),
-            SelectableText(message, textAlign: TextAlign.center),
+            Text(message, textAlign: TextAlign.center),
             const SizedBox(height: 16),
             FilledButton.icon(
               onPressed: onRetry,
