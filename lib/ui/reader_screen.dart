@@ -240,8 +240,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       }
                     },
                     onDocumentError: (error) {
-                      if (mounted)
+                      if (mounted) {
                         setState(() => _loadError = error.toString());
+                      }
                     },
                     onPageChanged: (page) {
                       if (mounted) setState(() => _currentPage = page);
