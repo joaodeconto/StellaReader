@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'data/import_service.dart';
 import 'domain/book.dart';
 import 'settings/app_settings.dart';
-import 'ui/discover_brazil_screen.dart';
 import 'ui/epub_reader_screen.dart';
 import 'ui/library_screen.dart';
 import 'ui/reader_screen.dart';
@@ -27,10 +26,6 @@ class App extends ConsumerWidget {
           path: '/',
           builder: (_, __) => const LibraryScreen(),
           routes: [
-            GoRoute(
-              path: 'discover-brasil',
-              builder: (_, __) => const DiscoverBrazilScreen(),
-            ),
             GoRoute(
               path: 'reader',
               builder: (_, state) {
