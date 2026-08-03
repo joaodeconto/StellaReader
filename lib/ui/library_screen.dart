@@ -47,35 +47,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             onChanged: (mode) {
               if (mode != null) AppSettings.setThemeMode(mode);
             },
-            child: Column(
+            child: const Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Appearance', style: Theme.of(context).textTheme.titleSmall),
-                const RadioListTile<ThemeMode>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Use device setting'),
-                  value: ThemeMode.system,
-                ),
-                const RadioListTile<ThemeMode>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Light'),
-                  value: ThemeMode.light,
-                ),
-                const RadioListTile<ThemeMode>(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text('Dark'),
-                  value: ThemeMode.dark,
-                ),
+                RadioListTile<ThemeMode>(title: Text('Use device setting'), value: ThemeMode.system),
+                RadioListTile<ThemeMode>(title: Text('Light'), value: ThemeMode.light),
+                RadioListTile<ThemeMode>(title: Text('Dark'), value: ThemeMode.dark),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
-            ),
-          ],
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
         ),
       ),
     );
@@ -90,13 +71,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       applicationVersion: '${info.version} (build ${info.buildNumber})',
       applicationIcon: const Icon(Icons.auto_stories, size: 48),
       children: const [
-        Text('A focused Android reader for PDF and EPUB books already on your device.'),
+        Text('Leitor Android de PDF e EPUB com biblioteca local e catálogo brasileiro EPUB.'),
       ],
     );
   }
 
   Future<void> _handleMenu(String value) async {
     switch (value) {
+      case 'discover':
+        context.push('/discover-brasil');
       case 'settings':
         await _showSettings();
       case 'about':
@@ -108,56 +91,41 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     if (kIsWeb) {
       return const Scaffold(
-        body: Center(
-          child: Padding(
-            padding: EdgeInsets.all(16),
-            child: Text(
-              'StellaReader is currently optimized for Android.',
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
+        body: Center(child: Text('StellaReader is currently optimized for Android.')),
       );
     }
 
     final books = ref.watch(booksProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Library'),
         actions: [
+          IconButton(
+            tooltip: 'EPUBs do Brasil',
+            onPressed: () => context.push('/discover-brasil'),
+            icon: const Icon(Icons.travel_explore),
+          ),
           IconButton(
             tooltip: 'Import PDF or EPUB',
             onPressed: _import,
             icon: const Icon(Icons.file_open_outlined),
           ),
           PopupMenuButton<String>(
-            tooltip: 'App menu',
             onSelected: _handleMenu,
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'settings',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.settings_outlined),
-                  title: Text('Settings'),
-                ),
-              ),
-              PopupMenuItem(
-                value: 'about',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.info_outline),
-                  title: Text('About'),
-                ),
-              ),
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'discover', child: Text('EPUBs do Brasil')),
+              PopupMenuItem(value: 'settings', child: Text('Settings')),
+              PopupMenuItem(value: 'about', child: Text('About')),
             ],
           ),
         ],
       ),
       body: books.when(
         data: (items) => items.isEmpty
-            ? _EmptyLibrary(onImport: _import)
+            ? _EmptyLibrary(
+                onImport: _import,
+                onDiscover: () => context.push('/discover-brasil'),
+              )
             : RefreshIndicator(
                 onRefresh: () async => ref.refresh(booksProvider.future),
                 child: ListView.separated(
@@ -168,20 +136,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     final book = items[index];
                     final epub = ImportService.isEpub(book);
                     return ListTile(
-                      leading: Icon(
-                        epub ? Icons.auto_stories : Icons.picture_as_pdf,
-                        size: 32,
-                      ),
-                      title: Text(
-                        book.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      subtitle: Text(
-                        epub
-                            ? 'EPUB · tap to continue reading'
-                            : 'PDF · last page ${book.lastPage}',
-                      ),
+                      leading: Icon(epub ? Icons.auto_stories : Icons.picture_as_pdf, size: 32),
+                      title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(epub ? 'EPUB · tap to continue reading' : 'PDF · last page ${book.lastPage}'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/reader', extra: book),
                     );
@@ -189,9 +146,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ),
               ),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, _) => _LibraryError(
-          message: error.toString(),
-          onRetry: () => ref.invalidate(booksProvider),
+        error: (error, _) => Center(
+          child: FilledButton.icon(
+            onPressed: () => ref.invalidate(booksProvider),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Try again'),
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -204,9 +164,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onImport});
+  const _EmptyLibrary({required this.onImport, required this.onDiscover});
 
   final VoidCallback onImport;
+  final VoidCallback onDiscover;
 
   @override
   Widget build(BuildContext context) {
@@ -216,68 +177,15 @@ class _EmptyLibrary extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.menu_book_outlined,
-              size: 72,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            Icon(Icons.menu_book_outlined, size: 72, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 20),
-            Text(
-              'Your books belong here',
-              style: Theme.of(context).textTheme.headlineSmall,
-              textAlign: TextAlign.center,
-            ),
+            Text('Your books belong here', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: 10),
-            const Text(
-              'Choose a real PDF or EPUB from this device. StellaReader keeps your reading position and opens it again from the Library.',
-              textAlign: TextAlign.center,
-            ),
+            const Text('Importe um PDF ou EPUB, ou descubra EPUBs brasileiros gratuitos.', textAlign: TextAlign.center),
             const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: onImport,
-              icon: const Icon(Icons.file_open_outlined),
-              label: const Text('Choose a book'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _LibraryError extends StatelessWidget {
-  const _LibraryError({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.error_outline, size: 48),
-            const SizedBox(height: 12),
-            const Text(
-              'The Library could not be loaded.',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try again'),
-            ),
+            FilledButton.icon(onPressed: onImport, icon: const Icon(Icons.file_open_outlined), label: const Text('Choose a book')),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(onPressed: onDiscover, icon: const Icon(Icons.travel_explore), label: const Text('EPUBs do Brasil')),
           ],
         ),
       ),
