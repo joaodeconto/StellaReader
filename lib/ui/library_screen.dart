@@ -90,15 +90,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       applicationVersion: '${info.version} (build ${info.buildNumber})',
       applicationIcon: const Icon(Icons.auto_stories, size: 48),
       children: const [
-        Text('Leitor Android de PDF e EPUB com biblioteca local e descoberta de livros brasileiros gratuitos.'),
+        Text('A focused Android reader for PDF and EPUB books already on your device.'),
       ],
     );
   }
 
   Future<void> _handleMenu(String value) async {
     switch (value) {
-      case 'discover':
-        context.push('/discover-brasil');
       case 'settings':
         await _showSettings();
       case 'about':
@@ -129,11 +127,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         title: const Text('Library'),
         actions: [
           IconButton(
-            tooltip: 'Descobrir livros brasileiros',
-            onPressed: () => context.push('/discover-brasil'),
-            icon: const Icon(Icons.travel_explore),
-          ),
-          IconButton(
             tooltip: 'Import PDF or EPUB',
             onPressed: _import,
             icon: const Icon(Icons.file_open_outlined),
@@ -142,14 +135,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             tooltip: 'App menu',
             onSelected: _handleMenu,
             itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'discover',
-                child: ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(Icons.travel_explore),
-                  title: Text('Descobrir no Brasil'),
-                ),
-              ),
               PopupMenuItem(
                 value: 'settings',
                 child: ListTile(
@@ -172,10 +157,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       ),
       body: books.when(
         data: (items) => items.isEmpty
-            ? _EmptyLibrary(
-                onImport: _import,
-                onDiscover: () => context.push('/discover-brasil'),
-              )
+            ? _EmptyLibrary(onImport: _import)
             : RefreshIndicator(
                 onRefresh: () async => ref.refresh(booksProvider.future),
                 child: ListView.separated(
@@ -222,10 +204,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 }
 
 class _EmptyLibrary extends StatelessWidget {
-  const _EmptyLibrary({required this.onImport, required this.onDiscover});
+  const _EmptyLibrary({required this.onImport});
 
   final VoidCallback onImport;
-  final VoidCallback onDiscover;
 
   @override
   Widget build(BuildContext context) {
@@ -248,7 +229,7 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             const Text(
-              'Importe um PDF ou EPUB do aparelho, ou descubra livros brasileiros gratuitos no catálogo.',
+              'Choose a real PDF or EPUB from this device. StellaReader keeps your reading position and opens it again from the Library.',
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -256,12 +237,6 @@ class _EmptyLibrary extends StatelessWidget {
               onPressed: onImport,
               icon: const Icon(Icons.file_open_outlined),
               label: const Text('Choose a book'),
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              onPressed: onDiscover,
-              icon: const Icon(Icons.travel_explore),
-              label: const Text('Descobrir no Brasil'),
             ),
           ],
         ),
