@@ -10,8 +10,11 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
-  group: android-release-${{ github.ref }}
+  group: android-release-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,8 +39,17 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter version
-        run: flutter --version
+      - name: Show versions
+        run: |
+          flutter --version
+          dart --version
+          java -version
+
+      - name: Clean generated outputs
+        run: |
+          flutter clean
+          cd android
+          ./gradlew clean
 
       - name: Install dependencies
         run: flutter pub get
