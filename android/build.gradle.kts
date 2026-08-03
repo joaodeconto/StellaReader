@@ -18,11 +18,14 @@ subprojects {
 
 // Keep every Android/Kotlin subproject on Java 17. This avoids generating
 // Java 21 bytecode that cannot be consumed by the Java 17 toolchain used by CI.
-// Applied in afterEvaluate so it runs after plugin modules (e.g. pdfx) set
-// their own, lower compileOptions default — otherwise theirs wins and Java
-// and Kotlin compile tasks end up targeting different JVM versions.
+// Applied after each subproject finishes its own evaluation, so it runs after
+// plugin modules (e.g. pdfx) set their own, lower compileOptions default —
+// otherwise theirs wins and Java/Kotlin compile tasks target different JVMs.
+// :app is forced to evaluate eagerly above via evaluationDependsOn, so by the
+// time we get here it may already be evaluated; afterEvaluate would throw on
+// an already-evaluated project, so apply immediately in that case instead.
 subprojects {
-    afterEvaluate {
+    val forceJvm17: () -> Unit = {
         tasks.withType<org.gradle.api.tasks.compile.JavaCompile>().configureEach {
             sourceCompatibility = "17"
             targetCompatibility = "17"
@@ -42,6 +45,12 @@ subprojects {
                 }
             }
         }
+    }
+
+    if (state.executed) {
+        forceJvm17()
+    } else {
+        afterEvaluate { forceJvm17() }
     }
 }
 
