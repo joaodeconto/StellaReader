@@ -47,7 +47,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final query = _query.toLowerCase().trim();
     return curatedCatalog.where((book) {
       final categoryMatches = _category == 'All' || book.category == _category;
-      final queryMatches = query.isEmpty ||
+      final queryMatches =
+          query.isEmpty ||
           book.title.toLowerCase().contains(query) ||
           book.author.toLowerCase().contains(query) ||
           book.description.toLowerCase().contains(query);
@@ -210,7 +211,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               child: ChoiceChip(
                                 label: Text(category),
                                 selected: _category == category,
-                                onSelected: (_) => setState(() => _category = category),
+                                onSelected: (_) =>
+                                    setState(() => _category = category),
                               ),
                             ),
                           )
@@ -264,7 +266,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 children: [
                                   Text(
                                     book.title,
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
                                   ),
                                   const SizedBox(height: 2),
                                   Text(book.author),
@@ -342,9 +346,9 @@ class _BookMark extends StatelessWidget {
       child: Text(
         initials,
         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              color: Theme.of(context).colorScheme.onPrimaryContainer,
-              fontWeight: FontWeight.bold,
-            ),
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
+          fontWeight: FontWeight.bold,
+        ),
       ),
     );
   }

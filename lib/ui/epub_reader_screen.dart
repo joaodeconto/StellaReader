@@ -53,8 +53,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
 
   void _onLocationChanged() {
     _saveDebounce?.cancel();
-    _saveDebounce =
-        Timer(const Duration(milliseconds: 600), _saveLastLocation);
+    _saveDebounce = Timer(const Duration(milliseconds: 600), _saveLastLocation);
   }
 
   @override
@@ -88,18 +87,20 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
     if (cfi == null) return;
 
     final label = _currentChapterLabel() ?? 'Localização';
-    await BookmarkRepository().insert(Bookmark(
-      bookId: widget.book.id!,
-      page: 0,
-      cfi: cfi,
-      label: label,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    ));
+    await BookmarkRepository().insert(
+      Bookmark(
+        bookId: widget.book.id!,
+        page: 0,
+        cfi: cfi,
+        label: label,
+        createdAt: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Marcador adicionado')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Marcador adicionado')));
   }
 
   Future<void> _showBookmarks() async {
@@ -112,7 +113,8 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
         children: items.isEmpty
             ? [const ListTile(title: Text('Sem marcadores'))]
             : items
-                .map((bm) => ListTile(
+                  .map(
+                    (bm) => ListTile(
                       leading: const Icon(Icons.bookmark),
                       title: Text(bm.label ?? 'Local'),
                       onTap: () {
@@ -121,8 +123,9 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
                         }
                         Navigator.pop(context);
                       },
-                    ))
-                .toList(),
+                    ),
+                  )
+                  .toList(),
       ),
     );
   }
@@ -180,10 +183,7 @@ class _EpubReaderScreenState extends ConsumerState<EpubReaderScreen>
         lowered.startsWith('chapter ') ||
         lowered.startsWith('capítulo ')) {
       result = result.replaceFirst(
-        RegExp(
-          r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*',
-          caseSensitive: false,
-        ),
+        RegExp(r'^(chapter|capítulo)\s+\d+\s*[:\-–—]\s*', caseSensitive: false),
         '',
       );
       if (result.toLowerCase().contains('project gutenberg')) return '';

@@ -29,9 +29,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       context.push('/reader', extra: book);
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $error')));
     }
   }
 
@@ -50,13 +50,27 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                RadioListTile<ThemeMode>(title: Text('Use device setting'), value: ThemeMode.system),
-                RadioListTile<ThemeMode>(title: Text('Light'), value: ThemeMode.light),
-                RadioListTile<ThemeMode>(title: Text('Dark'), value: ThemeMode.dark),
+                RadioListTile<ThemeMode>(
+                  title: Text('Use device setting'),
+                  value: ThemeMode.system,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: Text('Light'),
+                  value: ThemeMode.light,
+                ),
+                RadioListTile<ThemeMode>(
+                  title: Text('Dark'),
+                  value: ThemeMode.dark,
+                ),
               ],
             ),
           ),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Done'))],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Done'),
+            ),
+          ],
         ),
       ),
     );
@@ -71,7 +85,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       applicationVersion: '${info.version} (build ${info.buildNumber})',
       applicationIcon: const Icon(Icons.auto_stories, size: 48),
       children: const [
-        Text('Leitor Android de PDF e EPUB com biblioteca local e catálogo brasileiro EPUB.'),
+        Text(
+          'Leitor Android de PDF e EPUB com biblioteca local e catálogo brasileiro EPUB.',
+        ),
       ],
     );
   }
@@ -91,7 +107,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     if (kIsWeb) {
       return const Scaffold(
-        body: Center(child: Text('StellaReader is currently optimized for Android.')),
+        body: Center(
+          child: Text('StellaReader is currently optimized for Android.'),
+        ),
       );
     }
 
@@ -136,9 +154,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     final book = items[index];
                     final epub = ImportService.isEpub(book);
                     return ListTile(
-                      leading: Icon(epub ? Icons.auto_stories : Icons.picture_as_pdf, size: 32),
-                      title: Text(book.title, maxLines: 2, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(epub ? 'EPUB · tap to continue reading' : 'PDF · last page ${book.lastPage}'),
+                      leading: Icon(
+                        epub ? Icons.auto_stories : Icons.picture_as_pdf,
+                        size: 32,
+                      ),
+                      title: Text(
+                        book.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      subtitle: Text(
+                        epub
+                            ? 'EPUB · tap to continue reading'
+                            : 'PDF · last page ${book.lastPage}',
+                      ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/reader', extra: book),
                     );
@@ -177,15 +206,33 @@ class _EmptyLibrary extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.menu_book_outlined, size: 72, color: Theme.of(context).colorScheme.primary),
+            Icon(
+              Icons.menu_book_outlined,
+              size: 72,
+              color: Theme.of(context).colorScheme.primary,
+            ),
             const SizedBox(height: 20),
-            Text('Your books belong here', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Your books belong here',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 10),
-            const Text('Importe um PDF ou EPUB, ou descubra EPUBs brasileiros gratuitos.', textAlign: TextAlign.center),
+            const Text(
+              'Importe um PDF ou EPUB, ou descubra EPUBs brasileiros gratuitos.',
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 24),
-            FilledButton.icon(onPressed: onImport, icon: const Icon(Icons.file_open_outlined), label: const Text('Choose a book')),
+            FilledButton.icon(
+              onPressed: onImport,
+              icon: const Icon(Icons.file_open_outlined),
+              label: const Text('Choose a book'),
+            ),
             const SizedBox(height: 10),
-            OutlinedButton.icon(onPressed: onDiscover, icon: const Icon(Icons.travel_explore), label: const Text('EPUBs do Brasil')),
+            OutlinedButton.icon(
+              onPressed: onDiscover,
+              icon: const Icon(Icons.travel_explore),
+              label: const Text('EPUBs do Brasil'),
+            ),
           ],
         ),
       ),

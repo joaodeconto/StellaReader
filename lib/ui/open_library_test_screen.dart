@@ -49,19 +49,24 @@ class _OpenLibraryTestScreenState extends State<OpenLibraryTestScreen> {
 
       final docs = response.data?['docs'];
       final books = docs is List
-          ? docs.whereType<Map<String, dynamic>>().map(_OpenLibraryBook.fromJson).toList()
+          ? docs
+                .whereType<Map<String, dynamic>>()
+                .map(_OpenLibraryBook.fromJson)
+                .toList()
           : <_OpenLibraryBook>[];
 
       if (!mounted) return;
       setState(() {
         _books = books;
-        _status = 'HTTP ${response.statusCode} · ${stopwatch.elapsedMilliseconds} ms · ${books.length} results';
+        _status =
+            'HTTP ${response.statusCode} · ${stopwatch.elapsedMilliseconds} ms · ${books.length} results';
       });
     } on DioException catch (error) {
       stopwatch.stop();
       if (!mounted) return;
       setState(() {
-        _status = 'Dio ${error.type.name} after ${stopwatch.elapsedMilliseconds} ms\n'
+        _status =
+            'Dio ${error.type.name} after ${stopwatch.elapsedMilliseconds} ms\n'
             'Status: ${error.response?.statusCode ?? 'none'}\n'
             'Message: ${error.message}\n'
             'Underlying: ${error.error ?? 'none'}';
@@ -70,7 +75,8 @@ class _OpenLibraryTestScreenState extends State<OpenLibraryTestScreen> {
       stopwatch.stop();
       if (!mounted) return;
       setState(() {
-        _status = '${error.runtimeType} after ${stopwatch.elapsedMilliseconds} ms\n$error';
+        _status =
+            '${error.runtimeType} after ${stopwatch.elapsedMilliseconds} ms\n$error';
       });
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -111,7 +117,10 @@ class _OpenLibraryTestScreenState extends State<OpenLibraryTestScreen> {
                 ),
                 if (_status != null) ...[
                   const SizedBox(height: 12),
-                  SelectableText(_status!, style: Theme.of(context).textTheme.bodySmall),
+                  SelectableText(
+                    _status!,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ],
               ],
             ),
@@ -153,7 +162,11 @@ class _OpenLibraryTestScreenState extends State<OpenLibraryTestScreen> {
 }
 
 class _OpenLibraryBook {
-  const _OpenLibraryBook({required this.title, this.author, this.firstPublishYear});
+  const _OpenLibraryBook({
+    required this.title,
+    this.author,
+    this.firstPublishYear,
+  });
 
   factory _OpenLibraryBook.fromJson(Map<String, dynamic> json) {
     final authorNames = json['author_name'];

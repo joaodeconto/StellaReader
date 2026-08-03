@@ -26,21 +26,22 @@ class CatalogLoadException implements Exception {
 
 class OpdsService {
   OpdsService({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 12),
-                receiveTimeout: const Duration(seconds: 20),
-                followRedirects: true,
-                maxRedirects: 5,
-                responseType: ResponseType.plain,
-                headers: const {
-                  'Accept':
-                      'application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1',
-                  'User-Agent': 'StellaReader/0.2.2',
-                },
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 12),
+              receiveTimeout: const Duration(seconds: 20),
+              followRedirects: true,
+              maxRedirects: 5,
+              responseType: ResponseType.plain,
+              headers: const {
+                'Accept':
+                    'application/atom+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1',
+                'User-Agent': 'StellaReader/0.2.2',
+              },
+            ),
+          );
 
   final Dio _dio;
 
@@ -69,44 +70,48 @@ class OpdsService {
 
       final baseUri = Uri.parse(url);
       final document = XmlDocument.parse(body);
-      final entries = document.descendants
-          .whereType<XmlElement>()
-          .where((element) => element.name.local == 'entry');
+      final entries = document.descendants.whereType<XmlElement>().where(
+        (element) => element.name.local == 'entry',
+      );
 
-      final books = entries.map((entry) {
-        final title = _childElements(entry, 'title').firstOrNull?.innerText.trim() ??
-            'Untitled';
-        final author = _childElements(entry, 'author')
-                .expand((node) => _childElements(node, 'name'))
-                .firstOrNull
-                ?.innerText
-                .trim() ??
-            'Unknown author';
+      final books = entries
+          .map((entry) {
+            final title =
+                _childElements(entry, 'title').firstOrNull?.innerText.trim() ??
+                'Untitled';
+            final author =
+                _childElements(entry, 'author')
+                    .expand((node) => _childElements(node, 'name'))
+                    .firstOrNull
+                    ?.innerText
+                    .trim() ??
+                'Unknown author';
 
-        final links = _childElements(entry, 'link');
-        final acquisition = links.firstWhere(
-          (link) {
-            final type = (link.getAttribute('type') ?? '').toLowerCase();
-            final rel = (link.getAttribute('rel') ?? '').toLowerCase();
-            final href = link.getAttribute('href') ?? '';
-            return href.isNotEmpty &&
-                (type.contains('epub') ||
-                    type.contains('pdf') ||
-                    rel.contains('acquisition'));
-          },
-          orElse: () => XmlElement(XmlName('link')),
-        );
+            final links = _childElements(entry, 'link');
+            final acquisition = links.firstWhere((link) {
+              final type = (link.getAttribute('type') ?? '').toLowerCase();
+              final rel = (link.getAttribute('rel') ?? '').toLowerCase();
+              final href = link.getAttribute('href') ?? '';
+              return href.isNotEmpty &&
+                  (type.contains('epub') ||
+                      type.contains('pdf') ||
+                      rel.contains('acquisition'));
+            }, orElse: () => XmlElement(XmlName('link')));
 
-        final href = acquisition.getAttribute('href') ?? '';
-        final resolvedUrl = href.isEmpty ? '' : baseUri.resolve(href).toString();
+            final href = acquisition.getAttribute('href') ?? '';
+            final resolvedUrl = href.isEmpty
+                ? ''
+                : baseUri.resolve(href).toString();
 
-        return CatalogBook(
-          title: title,
-          author: author,
-          downloadUrl: resolvedUrl,
-          source: source,
-        );
-      }).where((book) => book.downloadUrl.isNotEmpty).toList();
+            return CatalogBook(
+              title: title,
+              author: author,
+              downloadUrl: resolvedUrl,
+              source: source,
+            );
+          })
+          .where((book) => book.downloadUrl.isNotEmpty)
+          .toList();
 
       if (books.isEmpty) {
         throw CatalogLoadException(
@@ -125,18 +130,21 @@ class OpdsService {
         DioExceptionType.badResponse => 'returned HTTP ${status ?? 'error'}',
         DioExceptionType.cancel => 'request was cancelled',
         DioExceptionType.connectionError => 'network connection failed',
-        DioExceptionType.unknown => error.error?.toString() ?? error.message ?? 'unknown network error',
+        DioExceptionType.unknown =>
+          error.error?.toString() ?? error.message ?? 'unknown network error',
       };
       throw CatalogLoadException('$source: $detail.');
     } on XmlParserException catch (error) {
-      throw CatalogLoadException('$source returned invalid XML: ${error.message}');
+      throw CatalogLoadException(
+        '$source returned invalid XML: ${error.message}',
+      );
     }
   }
 
   Iterable<XmlElement> _childElements(XmlElement parent, String localName) {
-    return parent.children
-        .whereType<XmlElement>()
-        .where((element) => element.name.local == localName);
+    return parent.children.whereType<XmlElement>().where(
+      (element) => element.name.local == localName,
+    );
   }
 }
 

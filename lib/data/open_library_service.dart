@@ -25,7 +25,8 @@ class OpenLibraryBook {
       archiveIds: archiveIds is List
           ? archiveIds.map((value) => value.toString()).toList()
           : const [],
-      hasFullText: json['has_fulltext'] == true || json['public_scan_b'] == true,
+      hasFullText:
+          json['has_fulltext'] == true || json['public_scan_b'] == true,
     );
   }
 
@@ -58,28 +59,27 @@ class OpenLibraryDownload {
 
 class OpenLibraryService {
   OpenLibraryService({Dio? dio})
-      : _dio = dio ??
-            Dio(
-              BaseOptions(
-                connectTimeout: const Duration(seconds: 12),
-                receiveTimeout: const Duration(seconds: 25),
-                followRedirects: true,
-                headers: const {'User-Agent': 'StellaReader/0.3.3'},
-              ),
-            );
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
+              connectTimeout: const Duration(seconds: 12),
+              receiveTimeout: const Duration(seconds: 25),
+              followRedirects: true,
+              headers: const {'User-Agent': 'StellaReader/0.3.3'},
+            ),
+          );
 
   final Dio _dio;
 
-  Future<List<OpenLibraryBook>> search(
-    String query, {
-    int limit = 30,
-  }) async {
+  Future<List<OpenLibraryBook>> search(String query, {int limit = 30}) async {
     final response = await _dio.get<Map<String, dynamic>>(
       'https://openlibrary.org/search.json',
       queryParameters: {
         'q': query,
         'limit': limit,
-        'fields': 'key,title,author_name,first_publish_year,cover_i,ia,has_fulltext,public_scan_b',
+        'fields':
+            'key,title,author_name,first_publish_year,cover_i,ia,has_fulltext,public_scan_b',
       },
     );
 
@@ -103,13 +103,14 @@ class OpenLibraryService {
       final files = response.data?['files'];
       if (files is! List) continue;
 
-      final candidates = files
-          .whereType<Map<String, dynamic>>()
-          .map(_BookCandidate.fromJson)
-          .whereType<_BookCandidate>()
-          .where((file) => file.isUsable)
-          .toList()
-        ..sort((a, b) => b.score.compareTo(a.score));
+      final candidates =
+          files
+              .whereType<Map<String, dynamic>>()
+              .map(_BookCandidate.fromJson)
+              .whereType<_BookCandidate>()
+              .where((file) => file.isUsable)
+              .toList()
+            ..sort((a, b) => b.score.compareTo(a.score));
 
       for (final candidate in candidates.take(6)) {
         final encodedName = candidate.name
@@ -174,8 +175,8 @@ class _BookCandidate {
     final extension = lower.endsWith('.epub')
         ? '.epub'
         : lower.endsWith('.pdf')
-            ? '.pdf'
-            : null;
+        ? '.pdf'
+        : null;
     if (extension == null) return null;
 
     final rawSize = json['size'];

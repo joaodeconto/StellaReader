@@ -68,9 +68,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       ),
     );
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Page $_currentPage bookmarked')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('Page $_currentPage bookmarked')));
   }
 
   Future<void> _showBookmarks() async {
@@ -94,17 +94,17 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             children: items.isEmpty
                 ? const [ListTile(title: Text('No bookmarks'))]
                 : items
-                    .map(
-                      (bookmark) => ListTile(
-                        leading: const Icon(Icons.bookmark),
-                        title: Text('Page ${bookmark.page}'),
-                        onTap: () {
-                          _controller.jumpToPage(bookmark.page);
-                          Navigator.pop(sheetContext);
-                        },
-                      ),
-                    )
-                    .toList(),
+                      .map(
+                        (bookmark) => ListTile(
+                          leading: const Icon(Icons.bookmark),
+                          title: Text('Page ${bookmark.page}'),
+                          onTap: () {
+                            _controller.jumpToPage(bookmark.page);
+                            Navigator.pop(sheetContext);
+                          },
+                        ),
+                      )
+                      .toList(),
           ),
         ),
       ),
@@ -137,10 +137,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(
-              dialogContext,
-              int.tryParse(input.text),
-            ),
+            onPressed: () =>
+                Navigator.pop(dialogContext, int.tryParse(input.text)),
             child: const Text('Go'),
           ),
         ],
@@ -230,7 +228,9 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     scrollDirection: Axis.horizontal,
                     pageSnapping: true,
                     physics: const PageScrollPhysics(),
-                    backgroundDecoration: const BoxDecoration(color: Colors.black),
+                    backgroundDecoration: const BoxDecoration(
+                      color: Colors.black,
+                    ),
                     onDocumentLoaded: (document) {
                       if (mounted) {
                         setState(() {
@@ -240,7 +240,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       }
                     },
                     onDocumentError: (error) {
-                      if (mounted) setState(() => _loadError = error.toString());
+                      if (mounted)
+                        setState(() => _loadError = error.toString());
                     },
                     onPageChanged: (page) {
                       if (mounted) setState(() => _currentPage = page);
@@ -257,7 +258,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     color: surface,
                     elevation: 8,
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       child: Row(
                         children: [
                           IconButton(
@@ -277,7 +281,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           ),
                           IconButton(
                             tooltip: 'Next page',
-                            onPressed: _pageCount == 0 || _currentPage < _pageCount
+                            onPressed:
+                                _pageCount == 0 || _currentPage < _pageCount
                                 ? _nextPage
                                 : null,
                             icon: const Icon(Icons.chevron_right),

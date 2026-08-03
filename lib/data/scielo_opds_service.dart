@@ -6,7 +6,9 @@ import '../domain/catalog_book.dart';
 class ScieloOpdsService {
   ScieloOpdsService({Dio? dio}) : _dio = dio ?? Dio();
 
-  static final Uri catalogUri = Uri.parse('https://opds.livros.scielo.org/opds/');
+  static final Uri catalogUri = Uri.parse(
+    'https://opds.livros.scielo.org/opds/',
+  );
 
   final Dio _dio;
 
@@ -24,7 +26,9 @@ class ScieloOpdsService {
 
     final body = response.data;
     if (body == null || body.trim().isEmpty) {
-      throw const FormatException('O catálogo SciELO retornou uma resposta vazia.');
+      throw const FormatException(
+        'O catálogo SciELO retornou uma resposta vazia.',
+      );
     }
 
     final document = XmlDocument.parse(body);
@@ -37,8 +41,7 @@ class ScieloOpdsService {
   }
 
   CatalogBook? _parseEntry(XmlElement entry) {
-    String text(String name) => entry
-        .descendants
+    String text(String name) => entry.descendants
         .whereType<XmlElement>()
         .firstWhere(
           (element) => element.name.local == name,
@@ -52,13 +55,14 @@ class ScieloOpdsService {
 
     final authors = entry
         .findAllElements('author')
-        .map((author) => author
-            .descendants
-            .whereType<XmlElement>()
-            .where((element) => element.name.local == 'name')
-            .map((element) => element.innerText.trim())
-            .where((value) => value.isNotEmpty)
-            .join())
+        .map(
+          (author) => author.descendants
+              .whereType<XmlElement>()
+              .where((element) => element.name.local == 'name')
+              .map((element) => element.innerText.trim())
+              .where((value) => value.isNotEmpty)
+              .join(),
+        )
         .where((value) => value.isNotEmpty)
         .join('; ');
 
@@ -88,7 +92,9 @@ class ScieloOpdsService {
       author: authors.isEmpty ? 'Autoria não informada' : authors,
       summary: text('summary'),
       publisher: text('publisher'),
-      license: text('rights').isEmpty ? 'Acesso conforme SciELO Livros' : text('rights'),
+      license: text('rights').isEmpty
+          ? 'Acesso conforme SciELO Livros'
+          : text('rights'),
       source: 'SciELO Livros',
       epubUrl: epubUrl,
       pageUrl: pageUrl,

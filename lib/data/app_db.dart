@@ -38,4 +38,3 @@ class AppDb {
     return _db!;
   }
 }
-
