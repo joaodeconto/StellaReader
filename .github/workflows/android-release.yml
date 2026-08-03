@@ -45,12 +45,6 @@ jobs:
           dart --version
           java -version
 
-      - name: Clean generated outputs
-        run: |
-          flutter clean
-          cd android
-          ./gradlew clean
-
       - name: Install dependencies
         run: flutter pub get
 
