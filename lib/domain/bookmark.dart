@@ -16,21 +16,20 @@ class Bookmark {
   });
 
   factory Bookmark.fromMap(Map<String, dynamic> m) => Bookmark(
-        id: m['id'] as int?,
-        bookId: m['bookId'] as int,
-        page: m['page'] as int,
-        cfi: m['cfi'] as String?,
-        label: m['label'] as String?,
-        createdAt: m['createdAt'] as int,
-      );
+    id: m['id'] as int?,
+    bookId: m['bookId'] as int,
+    page: m['page'] as int,
+    cfi: m['cfi'] as String?,
+    label: m['label'] as String?,
+    createdAt: m['createdAt'] as int,
+  );
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'bookId': bookId,
-        'page': page,
-        'cfi': cfi,
-        'label': label,
-        'createdAt': createdAt,
-      };
+    'id': id,
+    'bookId': bookId,
+    'page': page,
+    'cfi': cfi,
+    'label': label,
+    'createdAt': createdAt,
+  };
 }
-

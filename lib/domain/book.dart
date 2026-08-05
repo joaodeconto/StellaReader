@@ -30,19 +30,18 @@ class Book {
   }
 
   factory Book.fromMap(Map<String, dynamic> m) => Book(
-        id: m['id'] as int?,
-        title: m['title'] as String,
-        path: m['path'] as String,
-        lastPage: m['lastPage'] as int? ?? 1,
-        lastCfi: m['lastCfi'] as String?,
-      );
+    id: m['id'] as int?,
+    title: m['title'] as String,
+    path: m['path'] as String,
+    lastPage: m['lastPage'] as int? ?? 1,
+    lastCfi: m['lastCfi'] as String?,
+  );
 
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'title': title,
-        'path': path,
-        'lastPage': lastPage,
-        'lastCfi': lastCfi,
-      };
+    'id': id,
+    'title': title,
+    'path': path,
+    'lastPage': lastPage,
+    'lastCfi': lastCfi,
+  };
 }
-

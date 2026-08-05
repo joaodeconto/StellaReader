@@ -9,9 +9,12 @@ class BookmarkRepository {
 
   Future<List<Bookmark>> byBook(int bookId) async {
     final db = await AppDb.instance;
-    final rows = await db.query('bookmarks',
-        where: 'bookId=?', whereArgs: [bookId], orderBy: 'createdAt ASC');
+    final rows = await db.query(
+      'bookmarks',
+      where: 'bookId=?',
+      whereArgs: [bookId],
+      orderBy: 'createdAt ASC',
+    );
     return rows.map(Bookmark.fromMap).toList();
   }
 }
-

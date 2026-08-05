@@ -9,7 +9,7 @@ import 'book_repository.dart';
 
 class ImportService {
   ImportService({BookRepository? repository})
-      : _repository = repository ?? BookRepository();
+    : _repository = repository ?? BookRepository();
 
   final BookRepository _repository;
 
@@ -38,7 +38,8 @@ class ImportService {
 
     final baseName = p.basenameWithoutExtension(source.path);
     final safeName = baseName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]+'), '_');
-    final fileName = '${DateTime.now().microsecondsSinceEpoch}_$safeName$extension';
+    final fileName =
+        '${DateTime.now().microsecondsSinceEpoch}_$safeName$extension';
     final destination = File(p.join(libraryDir.path, fileName));
     await source.copy(destination.path);
 

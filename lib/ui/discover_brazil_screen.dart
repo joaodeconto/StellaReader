@@ -77,7 +77,9 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Não foi possível baixar/importar este EPUB.')),
+          const SnackBar(
+            content: Text('Não foi possível baixar/importar este EPUB.'),
+          ),
         );
       }
     } finally {
@@ -146,14 +148,18 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
                       return ListTile(
                         leading: const Icon(Icons.auto_stories),
                         title: Text(book.title),
-                        subtitle: Text('${book.author}\n${book.publisher.isEmpty ? book.source : book.publisher} · EPUB'),
+                        subtitle: Text(
+                          '${book.author}\n${book.publisher.isEmpty ? book.source : book.publisher} · EPUB',
+                        ),
                         isThreeLine: true,
                         onTap: downloading ? null : () => _download(book),
                         trailing: downloading
                             ? SizedBox(
                                 width: 36,
                                 height: 36,
-                                child: CircularProgressIndicator(value: _downloads[book.id]),
+                                child: CircularProgressIndicator(
+                                  value: _downloads[book.id],
+                                ),
                               )
                             : PopupMenuButton<String>(
                                 onSelected: (value) {
@@ -161,8 +167,14 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
                                   if (value == 'source') _openSource(book);
                                 },
                                 itemBuilder: (_) => const [
-                                  PopupMenuItem(value: 'download', child: Text('Baixar EPUB')),
-                                  PopupMenuItem(value: 'source', child: Text('Abrir fonte')),
+                                  PopupMenuItem(
+                                    value: 'download',
+                                    child: Text('Baixar EPUB'),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'source',
+                                    child: Text('Abrir fonte'),
+                                  ),
                                 ],
                               ),
                       );
