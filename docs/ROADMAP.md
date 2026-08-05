@@ -17,19 +17,13 @@
   - Fails gracefully with a message.
   - Opens the downloaded book at page 1; persists `lastPage` after reading.
 
-**2) Android Share-to-Open**
-- User flow: Another app → Share PDF → choose StellaReader → book appears and opens.
-- Tech: `receive_sharing_intent`.
-- Manifest (snippet):
-  - Add to `android/app/src/main/AndroidManifest.xml` under the main Activity:
-  - Allow `SEND` and `SEND_MULTIPLE` with `application/pdf`.
-- Code:
-  - On app start, check `ReceiveSharingIntent.getInitialMedia()`.
-  - Subscribe to `ReceiveSharingIntent.getMediaStream()` for runtime shares.
-  - Map shared file path to `Book` (insert if new), then navigate to Reader.
-- Acceptance:
-  - Cold and warm shares work.
-  - Multiple PDFs share inserts all; opens the last one or shows a picker.
+**2) Android Share-to-Open — done**
+- User flow: Another app → Share a PDF or EPUB → choose StellaReader → the book
+  is added to the library and opens.
+- Shipped as `SEND`/`SEND_MULTIPLE` intent filters plus `ShareIntake`; a share
+  of several books imports all of them and opens the first.
+- See `docs/SHARING_ANDROID.md` for how it is wired and what is deliberately
+  left out (`ACTION_VIEW`).
 
 **3) Minimal Layout Polish**
 - Library:
