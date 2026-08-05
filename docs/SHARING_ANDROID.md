@@ -1,7 +1,13 @@
 **Android: Share PDFs to StellaReader**
 
+> **Status: not implemented — design sketch only.**
+> Nothing below is wired up. The `receive_sharing_intent` dependency was
+> removed from `pubspec.yaml` because no code referenced it, and the manifest
+> has no `SEND` intent filters. Keep this document as the plan for building the
+> feature; re-add the dependency at that point.
+
 Packages
-- `receive_sharing_intent`
+- `receive_sharing_intent` (not currently a dependency)
 
 Manifest
 - Edit `android/app/src/main/AndroidManifest.xml` and add intent filters to the main activity:
