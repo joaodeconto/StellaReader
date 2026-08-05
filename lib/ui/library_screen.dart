@@ -31,7 +31,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Import failed: $error')));
+      ).showSnackBar(SnackBar(content: Text('Falha ao importar: $error')));
     }
   }
 
@@ -41,7 +41,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       builder: (context) => ValueListenableBuilder<ThemeMode>(
         valueListenable: AppSettings.themeMode,
         builder: (context, selectedMode, _) => AlertDialog(
-          title: const Text('Settings'),
+          title: const Text('Ajustes'),
           content: RadioGroup<ThemeMode>(
             groupValue: selectedMode,
             onChanged: (mode) {
@@ -51,15 +51,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 RadioListTile<ThemeMode>(
-                  title: Text('Use device setting'),
+                  title: Text('Usar o tema do sistema'),
                   value: ThemeMode.system,
                 ),
                 RadioListTile<ThemeMode>(
-                  title: Text('Light'),
+                  title: Text('Claro'),
                   value: ThemeMode.light,
                 ),
                 RadioListTile<ThemeMode>(
-                  title: Text('Dark'),
+                  title: Text('Escuro'),
                   value: ThemeMode.dark,
                 ),
               ],
@@ -68,7 +68,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Done'),
+              child: const Text('Concluído'),
             ),
           ],
         ),
@@ -107,16 +107,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   Widget build(BuildContext context) {
     if (kIsWeb) {
       return const Scaffold(
-        body: Center(
-          child: Text('StellaReader is currently optimized for Android.'),
-        ),
+        body: Center(child: Text('O StellaReader foi feito para Android.')),
       );
     }
 
     final books = ref.watch(booksProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Library'),
+        title: const Text('Biblioteca'),
         actions: [
           IconButton(
             tooltip: 'EPUBs do Brasil',
@@ -124,7 +122,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             icon: const Icon(Icons.travel_explore),
           ),
           IconButton(
-            tooltip: 'Import PDF or EPUB',
+            tooltip: 'Importar PDF ou EPUB',
             onPressed: _import,
             icon: const Icon(Icons.file_open_outlined),
           ),
@@ -132,8 +130,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             onSelected: _handleMenu,
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'discover', child: Text('EPUBs do Brasil')),
-              PopupMenuItem(value: 'settings', child: Text('Settings')),
-              PopupMenuItem(value: 'about', child: Text('About')),
+              PopupMenuItem(value: 'settings', child: Text('Ajustes')),
+              PopupMenuItem(value: 'about', child: Text('Sobre')),
             ],
           ),
         ],
@@ -165,8 +163,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       ),
                       subtitle: Text(
                         epub
-                            ? 'EPUB · tap to continue reading'
-                            : 'PDF · last page ${book.lastPage}',
+                            ? 'EPUB · toque para continuar lendo'
+                            : 'PDF · página ${book.lastPage}',
                       ),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => context.push('/reader', extra: book),
@@ -179,14 +177,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           child: FilledButton.icon(
             onPressed: () => ref.invalidate(booksProvider),
             icon: const Icon(Icons.refresh),
-            label: const Text('Try again'),
+            label: const Text('Tentar novamente'),
           ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _import,
         icon: const Icon(Icons.add),
-        label: const Text('Add book'),
+        label: const Text('Adicionar livro'),
       ),
     );
   }
@@ -213,7 +211,7 @@ class _EmptyLibrary extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             Text(
-              'Your books belong here',
+              'Seus livros ficam aqui',
               style: Theme.of(context).textTheme.headlineSmall,
             ),
             const SizedBox(height: 10),
@@ -225,7 +223,7 @@ class _EmptyLibrary extends StatelessWidget {
             FilledButton.icon(
               onPressed: onImport,
               icon: const Icon(Icons.file_open_outlined),
-              label: const Text('Choose a book'),
+              label: const Text('Escolher um livro'),
             ),
             const SizedBox(height: 10),
             OutlinedButton.icon(

@@ -70,7 +70,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(SnackBar(content: Text('Page $_currentPage bookmarked')));
+    ).showSnackBar(SnackBar(content: Text('Página $_currentPage marcada')));
   }
 
   Future<void> _showBookmarks() async {
@@ -92,12 +92,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           child: ListView(
             shrinkWrap: true,
             children: items.isEmpty
-                ? const [ListTile(title: Text('No bookmarks'))]
+                ? const [ListTile(title: Text('Sem marcadores'))]
                 : items
                       .map(
                         (bookmark) => ListTile(
                           leading: const Icon(Icons.bookmark),
-                          title: Text('Page ${bookmark.page}'),
+                          title: Text('Página ${bookmark.page}'),
                           onTap: () {
                             _controller.jumpToPage(bookmark.page);
                             Navigator.pop(sheetContext);
@@ -119,13 +119,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     final selected = await showDialog<int>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Go to page'),
+        title: const Text('Ir para a página'),
         content: TextField(
           controller: input,
           autofocus: true,
           keyboardType: TextInputType.number,
           decoration: InputDecoration(
-            hintText: _pageCount > 0 ? '1–$_pageCount' : 'Page number',
+            hintText: _pageCount > 0 ? '1–$_pageCount' : 'Número da página',
           ),
           onSubmitted: (value) {
             Navigator.pop(dialogContext, int.tryParse(value));
@@ -134,12 +134,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
+            child: const Text('Cancelar'),
           ),
           FilledButton(
             onPressed: () =>
                 Navigator.pop(dialogContext, int.tryParse(input.text)),
-            child: const Text('Go'),
+            child: const Text('Ir'),
           ),
         ],
       ),
@@ -191,12 +191,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 title: Text(widget.book.title),
                 actions: [
                   IconButton(
-                    tooltip: 'Bookmarks',
+                    tooltip: 'Marcadores',
                     icon: const Icon(Icons.bookmarks_outlined),
                     onPressed: _showBookmarks,
                   ),
                   IconButton(
-                    tooltip: 'Hide controls',
+                    tooltip: 'Ocultar controles',
                     icon: const Icon(Icons.fullscreen),
                     onPressed: _toggleControls,
                   ),
@@ -211,7 +211,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    'Could not open this PDF.',
+                    'Não foi possível abrir este PDF.',
                     style: const TextStyle(color: Colors.white),
                     textAlign: TextAlign.center,
                   ),
