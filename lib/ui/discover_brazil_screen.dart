@@ -44,6 +44,11 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   Object? _error;
   String _query = '';
 
+  /// Bumped on every reload. A pagination request that was in flight when the
+  /// reader refreshed belongs to the previous list, and appending its page to
+  /// the new one would interleave two different loads.
+  int _generation = 0;
+
   @override
   void initState() {
     super.initState();
@@ -59,11 +64,15 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   }
 
   Future<void> _loadFirstPage() async {
+    final generation = ++_generation;
     _pages.clear();
     _error = null;
     try {
-      _pages.add(await _service.loadFeed(widget.section?.uri));
+      final feed = await _service.loadFeed(widget.section?.uri);
+      if (generation != _generation) return;
+      _pages.add(feed);
     } catch (error) {
+      if (generation != _generation) return;
       _error = error;
     }
   }
@@ -71,18 +80,23 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   void _reload() => setState(() => _loading = _loadFirstPage());
 
   Future<void> _loadMore() async {
+    if (_pages.isEmpty || _loadingMore) return;
     final next = _pages.last.next;
-    if (next == null || _loadingMore) return;
+    if (next == null) return;
+
+    final generation = _generation;
     setState(() => _loadingMore = true);
     try {
       final page = await _service.loadFeed(next);
-      if (mounted) setState(() => _pages.add(page));
+      // A refresh overtook this request, so these pages are no longer the
+      // ones on screen.
+      if (!mounted || generation != _generation) return;
+      setState(() => _pages.add(page));
     } catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(describeCatalogError(error))));
-      }
+      if (!mounted || generation != _generation) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(describeCatalogError(error))));
     } finally {
       if (mounted) setState(() => _loadingMore = false);
     }
@@ -215,9 +229,18 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
             },
             child: books.isEmpty && sections.isEmpty
                 ? ListView(
-                    children: const [
-                      SizedBox(height: 80),
-                      _SearchMissMessage(),
+                    children: [
+                      const SizedBox(height: 80),
+                      const _SearchMissMessage(),
+                      // The message tells the reader to load more pages, so
+                      // the control that does it has to survive an empty
+                      // search — otherwise the only way forward is to clear
+                      // the query, page ahead, and search again.
+                      if (_hasMore)
+                        _LoadMoreTile(
+                          loading: _loadingMore,
+                          onPressed: _loadMore,
+                        ),
                     ],
                   )
                 : ListView.separated(
