@@ -32,8 +32,11 @@ class ScieloOpdsService {
     }
 
     final document = XmlDocument.parse(body);
+    // Atom is matched in any namespace: a feed is free to bind it to a prefix
+    // (`<atom:entry>`) instead of making it the default, and both mean the
+    // same thing. Matching the bare name would silently find nothing.
     return document
-        .findAllElements('entry')
+        .findAllElements('entry', namespace: '*')
         .map(_parseEntry)
         .whereType<CatalogBook>()
         .where((book) => book.epubUrl != null)
@@ -54,7 +57,7 @@ class ScieloOpdsService {
     if (title.isEmpty) return null;
 
     final authors = entry
-        .findAllElements('author')
+        .findAllElements('author', namespace: '*')
         .map(
           (author) => author.descendants
               .whereType<XmlElement>()
@@ -70,7 +73,7 @@ class ScieloOpdsService {
     Uri? pageUrl;
     Uri? coverUrl;
 
-    for (final link in entry.findAllElements('link')) {
+    for (final link in entry.findAllElements('link', namespace: '*')) {
       final href = link.getAttribute('href');
       if (href == null || href.isEmpty) continue;
       final uri = catalogUri.resolve(href);
