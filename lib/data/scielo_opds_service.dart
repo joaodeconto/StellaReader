@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:xml/xml.dart';
 
+import '../app_info.dart';
 import '../domain/catalog_book.dart';
 
 /// Reads the SciELO Livros OPDS catalog.
@@ -77,7 +78,7 @@ class ScieloOpdsService {
         responseType: ResponseType.plain,
         headers: const {
           'Accept': 'application/atom+xml, application/xml;q=0.9',
-          'User-Agent': 'StellaReader/0.4.1',
+          'User-Agent': userAgent,
         },
       ),
     );

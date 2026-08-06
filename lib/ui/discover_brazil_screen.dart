@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:xml/xml.dart';
 
+import '../app_info.dart';
 import '../data/import_service.dart';
 import '../data/scielo_opds_service.dart';
 import '../domain/catalog_book.dart';
@@ -123,7 +124,7 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
           receiveTimeout: const Duration(minutes: 4),
           headers: const {
             'Accept': 'application/epub+zip, application/octet-stream;q=0.9',
-            'User-Agent': 'StellaReader/0.4.1',
+            'User-Agent': userAgent,
           },
         ),
         onReceiveProgress: (received, total) {
