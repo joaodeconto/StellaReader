@@ -3,14 +3,19 @@ import 'package:xml/xml.dart';
 
 import '../app_info.dart';
 import '../domain/catalog_book.dart';
+import '../domain/catalog_feed.dart';
 
-/// Reads the SciELO Livros OPDS catalog.
+/// Reads the SciELO Books OPDS catalog, one feed at a time.
 ///
 /// OPDS feeds come in two kinds. An *acquisition* feed lists books you can
 /// download; a *navigation* feed lists other feeds. The root of a server is
-/// conventionally a navigation feed, so finding books usually means following
-/// it one level down — a client that only reads the root sees an empty
-/// catalog and cannot tell that apart from a server with nothing to offer.
+/// conventionally a navigation feed, and SciELO's is: New Releases,
+/// Publishers, Alphabetical.
+///
+/// This reads whichever feed it is asked for and reports what is in it. It
+/// deliberately does not crawl. The catalog runs to thousands of titles, so
+/// any bounded walk of it returns an arbitrary slice while looking like the
+/// whole thing — which branch to open is the reader's call, not ours.
 class ScieloOpdsService {
   ScieloOpdsService({Dio? dio}) : _dio = dio ?? Dio();
 
@@ -21,54 +26,12 @@ class ScieloOpdsService {
   /// publishes OPDS. The feed identifies itself as `books.scielo.org/opds/`.
   static final Uri catalogUri = Uri.parse('https://books.scielo.org/opds/');
 
-  /// Ceiling on requests per load, so a catalog that links in circles or
-  /// paginates forever cannot spin indefinitely.
-  static const _requestBudget = 12;
-
-  /// How far to chase navigation feeds. The root plus two levels reaches the
-  /// acquisition feeds on every OPDS layout worth supporting.
-  static const _maxDepth = 2;
-
   final Dio _dio;
 
-  Future<List<CatalogBook>> loadEpubs() async {
-    final books = <String, CatalogBook>{};
-    final visited = <Uri>{};
-    var budget = _requestBudget;
-
-    Future<void> walk(Uri uri, int depth, {required bool tolerant}) async {
-      if (budget <= 0 || depth > _maxDepth || !visited.add(uri)) return;
-      budget--;
-
-      final _Feed feed;
-      try {
-        feed = _parseFeed(await _fetch(uri), uri);
-      } on Exception {
-        // One broken section should not take the whole catalog down with it.
-        // The root is the exception: if that fails there is nothing to show,
-        // and the screen needs to be able to say why.
-        if (!tolerant) rethrow;
-        return;
-      }
-
-      for (final book in feed.books) {
-        books.putIfAbsent(book.id, () => book);
-      }
-
-      if (feed.books.isEmpty) {
-        // Nothing to download here, so this is a navigation feed: the books
-        // are one level further in.
-        for (final link in feed.navigation) {
-          await walk(link, depth + 1, tolerant: true);
-        }
-      } else if (feed.next != null) {
-        // A page of books, with more behind it.
-        await walk(feed.next!, depth, tolerant: true);
-      }
-    }
-
-    await walk(catalogUri, 0, tolerant: false);
-    return books.values.toList(growable: false);
+  /// Reads [uri], defaulting to the catalog root.
+  Future<OpdsFeed> loadFeed([Uri? uri]) async {
+    final target = uri ?? catalogUri;
+    return _parseFeed(await _fetch(target), target);
   }
 
   Future<String> _fetch(Uri uri) async {
@@ -92,35 +55,43 @@ class ScieloOpdsService {
     return body;
   }
 
-  _Feed _parseFeed(String body, Uri base) {
+  OpdsFeed _parseFeed(String body, Uri base) {
     final document = XmlDocument.parse(body);
     final books = <CatalogBook>[];
-    final navigation = <Uri>[];
+    final sections = <CatalogSection>[];
 
-    // Atom is matched in any namespace: a feed is free to bind it to a prefix
-    // (`<atom:entry>`) instead of making it the default, and both mean the
-    // same thing. Matching the bare name would silently find nothing.
+    // Atom is matched in any namespace: SciELO binds it to a prefix
+    // (`<atom:entry>`) rather than making it the default, and matching the
+    // bare name would silently find nothing.
     for (final entry in document.findAllElements('entry', namespace: '*')) {
       final parsed = _parseEntry(entry, base);
       if (parsed == null) continue;
       if (parsed.book != null) {
         books.add(parsed.book!);
-      } else if (parsed.feed != null) {
-        navigation.add(parsed.feed!);
+      } else if (parsed.section != null) {
+        sections.add(parsed.section!);
       }
     }
 
-    return _Feed(
+    return OpdsFeed(
+      title: _feedTitle(document),
       books: books,
-      navigation: navigation,
+      sections: sections,
       next: _nextPage(document, base),
     );
   }
 
+  /// The feed's own title, ignoring the titles inside its entries.
+  String _feedTitle(XmlDocument document) {
+    for (final child in document.rootElement.childElements) {
+      if (child.name.local == 'title') return child.innerText.trim();
+    }
+    return '';
+  }
+
   /// The feed-level `rel="next"` link, ignoring the ones inside entries.
   Uri? _nextPage(XmlDocument document, Uri base) {
-    final root = document.rootElement;
-    for (final link in root.childElements) {
+    for (final link in document.rootElement.childElements) {
       if (link.name.local != 'link') continue;
       if (link.getAttribute('rel') != 'next') continue;
       final href = link.getAttribute('href');
@@ -180,7 +151,9 @@ class ScieloOpdsService {
     }
 
     if (epubUrl == null) {
-      return feedUrl == null ? null : _Entry.feed(feedUrl);
+      return feedUrl == null
+          ? null
+          : _Entry.section(CatalogSection(title: title, uri: feedUrl));
     }
 
     return _Entry.book(
@@ -204,25 +177,11 @@ class ScieloOpdsService {
   void close() => _dio.close(force: true);
 }
 
-/// One feed's worth of results: the books in it, the feeds it points at, and
-/// the page after it.
-class _Feed {
-  const _Feed({
-    required this.books,
-    required this.navigation,
-    required this.next,
-  });
-
-  final List<CatalogBook> books;
-  final List<Uri> navigation;
-  final Uri? next;
-}
-
 /// An entry is either a book to download or a pointer to another feed.
 class _Entry {
-  const _Entry.book(CatalogBook this.book) : feed = null;
-  const _Entry.feed(Uri this.feed) : book = null;
+  const _Entry.book(CatalogBook this.book) : section = null;
+  const _Entry.section(CatalogSection this.section) : book = null;
 
   final CatalogBook? book;
-  final Uri? feed;
+  final CatalogSection? section;
 }

@@ -8,6 +8,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import 'data/import_service.dart';
 import 'data/share_intake.dart';
 import 'domain/book.dart';
+import 'domain/catalog_feed.dart';
 import 'settings/app_settings.dart';
 import 'ui/discover_brazil_screen.dart';
 import 'ui/epub_reader_screen.dart';
@@ -42,7 +43,11 @@ class _AppState extends ConsumerState<App> {
         routes: [
           GoRoute(
             path: 'discover-brasil',
-            builder: (_, __) => const DiscoverBrazilScreen(),
+            // The catalog is a tree, so this route is pushed once per level:
+            // no section is the root, and each section carries the feed to
+            // open next.
+            builder: (_, state) =>
+                DiscoverBrazilScreen(section: state.extra as CatalogSection?),
           ),
           GoRoute(
             path: 'reader',
