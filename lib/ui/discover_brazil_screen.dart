@@ -6,12 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:xml/xml.dart';
 
 import '../app_info.dart';
 import '../data/import_service.dart';
 import '../data/scielo_opds_service.dart';
 import '../domain/catalog_book.dart';
+import 'catalog_error.dart';
 
 class DiscoverBrazilScreen extends StatefulWidget {
   const DiscoverBrazilScreen({super.key});
@@ -43,69 +43,6 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   }
 
   void _reload() => setState(() => _catalog = _service.loadEpubs());
-
-  /// Turns a failure into something a reader can act on.
-  ///
-  /// The catalog is somebody else's server, so "it broke" is not enough: the
-  /// fix for being offline is different from the fix for SciELO being down or
-  /// changing the shape of its feed.
-  static String _describeError(Object error) {
-    if (error is DioException) {
-      // A rejected certificate arrives as an unclassified DioException
-      // wrapping a HandshakeException, so it has to be caught before the
-      // switch below or it reads as a generic connection problem.
-      if (error.type == DioExceptionType.badCertificate ||
-          error.error is HandshakeException) {
-        return 'O certificado de segurança do catálogo SciELO está vencido '
-            'ou inválido, então o aplicativo se recusa a confiar na conexão. '
-            'Isso é um problema no servidor do SciELO e só passa quando eles '
-            'renovarem o certificado.';
-      }
-      return switch (error.type) {
-        DioExceptionType.connectionError ||
-        DioExceptionType.connectionTimeout =>
-          'Não foi possível se conectar ao '
-              'catálogo SciELO. Verifique sua conexão.',
-        DioExceptionType.receiveTimeout || DioExceptionType.sendTimeout =>
-          'O catálogo SciELO demorou demais para responder.',
-        DioExceptionType.badResponse =>
-          'O catálogo SciELO respondeu com erro '
-              '${error.response?.statusCode ?? 'desconhecido'}.',
-        DioExceptionType.badCertificate =>
-          'O certificado de segurança do catálogo SciELO não foi aceito.',
-        DioExceptionType.cancel => 'A busca no catálogo foi cancelada.',
-        DioExceptionType.unknown =>
-          'Não foi possível falar com o catálogo SciELO. Se você estiver '
-              'usando VPN, tente desligá-la.',
-      };
-    }
-    if (error is HandshakeException) {
-      return 'O certificado de segurança do catálogo SciELO está vencido ou '
-          'inválido. O problema é no servidor do SciELO.';
-    }
-    if (error is FormatException || error is XmlException) {
-      return 'O catálogo SciELO respondeu em um formato inesperado.';
-    }
-    return 'Não foi possível carregar o catálogo SciELO.';
-  }
-
-  /// The underlying failure, verbatim.
-  ///
-  /// The friendly sentence above is a guess at what went wrong; this is what
-  /// actually happened. Without it a network fault that Dio could not
-  /// classify is indistinguishable from any other, which makes the screen
-  /// impossible to debug from a screenshot.
-  static String _technicalDetail(Object error) {
-    if (error is DioException) {
-      final cause = error.error ?? error.message;
-      return [
-        ScieloOpdsService.catalogUri.host,
-        error.type.name,
-        if (cause != null) '$cause',
-      ].join(' · ');
-    }
-    return '$error';
-  }
 
   Future<void> _download(CatalogBook book) async {
     final url = book.epubUrl;
@@ -174,8 +111,8 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
             return _CatalogMessage(
               icon: Icons.cloud_off,
               title: 'Catálogo indisponível',
-              detail: _describeError(snapshot.error!),
-              technical: _technicalDetail(snapshot.error!),
+              detail: describeCatalogError(snapshot.error!),
+              technical: catalogErrorDetail(snapshot.error!),
               onRetry: _reload,
             );
           }
@@ -295,7 +232,10 @@ class _CatalogMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      // Scrollable because the retry button is last: on a landscape phone, or
+      // with large text scaling, a fixed column would push the one control
+      // that recovers from the error off the bottom of the screen.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
