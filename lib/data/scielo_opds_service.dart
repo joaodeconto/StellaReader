@@ -17,7 +17,11 @@ import '../domain/catalog_feed.dart';
 /// any bounded walk of it returns an arbitrary slice while looking like the
 /// whole thing — which branch to open is the reader's call, not ours.
 class ScieloOpdsService {
-  ScieloOpdsService({Dio? dio}) : _dio = dio ?? Dio();
+  ScieloOpdsService({Dio? dio})
+    : _dio =
+          dio ??
+          // connectTimeout has no per-request equivalent, so it goes here.
+          Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
 
   /// The catalog root.
   ///
@@ -39,6 +43,11 @@ class ScieloOpdsService {
       uri,
       options: Options(
         responseType: ResponseType.plain,
+        // A feed is a small document. Without these a stalled connection
+        // hangs the screen indefinitely instead of failing into something the
+        // reader can retry.
+        sendTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 30),
         headers: const {
           'Accept': 'application/atom+xml, application/xml;q=0.9',
           'User-Agent': userAgent,

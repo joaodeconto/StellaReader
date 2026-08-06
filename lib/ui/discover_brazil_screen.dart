@@ -67,6 +67,9 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
     final generation = ++_generation;
     _pages.clear();
     _error = null;
+    // Any pagination still in flight belongs to the list being replaced, so
+    // the new one starts idle rather than waiting for that request to settle.
+    _loadingMore = false;
     try {
       final feed = await _service.loadFeed(widget.section?.uri);
       if (generation != _generation) return;
@@ -98,7 +101,11 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(describeCatalogError(error))));
     } finally {
-      if (mounted) setState(() => _loadingMore = false);
+      // Only clear the flag if this load still owns it. A refresh already
+      // reset it, and may have started a pagination of its own.
+      if (mounted && generation == _generation) {
+        setState(() => _loadingMore = false);
+      }
     }
   }
 
