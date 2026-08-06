@@ -60,13 +60,36 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
         DioExceptionType.badResponse =>
           'O catálogo SciELO respondeu com erro '
               '${error.response?.statusCode ?? 'desconhecido'}.',
-        _ => 'Não foi possível falar com o catálogo SciELO.',
+        DioExceptionType.badCertificate =>
+          'O certificado de segurança do catálogo SciELO não foi aceito.',
+        DioExceptionType.cancel => 'A busca no catálogo foi cancelada.',
+        DioExceptionType.unknown =>
+          'Não foi possível falar com o catálogo SciELO. Se você estiver '
+              'usando VPN, tente desligá-la.',
       };
     }
     if (error is FormatException || error is XmlException) {
       return 'O catálogo SciELO respondeu em um formato inesperado.';
     }
     return 'Não foi possível carregar o catálogo SciELO.';
+  }
+
+  /// The underlying failure, verbatim.
+  ///
+  /// The friendly sentence above is a guess at what went wrong; this is what
+  /// actually happened. Without it a network fault that Dio could not
+  /// classify is indistinguishable from any other, which makes the screen
+  /// impossible to debug from a screenshot.
+  static String _technicalDetail(Object error) {
+    if (error is DioException) {
+      final cause = error.error ?? error.message;
+      return [
+        ScieloOpdsService.catalogUri.host,
+        error.type.name,
+        if (cause != null) '$cause',
+      ].join(' · ');
+    }
+    return '$error';
   }
 
   Future<void> _download(CatalogBook book) async {
@@ -137,6 +160,7 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
               icon: Icons.cloud_off,
               title: 'Catálogo indisponível',
               detail: _describeError(snapshot.error!),
+              technical: _technicalDetail(snapshot.error!),
               onRetry: _reload,
             );
           }
@@ -243,12 +267,14 @@ class _CatalogMessage extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.detail,
+    this.technical,
     this.onRetry,
   });
 
   final IconData icon;
   final String title;
   final String detail;
+  final String? technical;
   final VoidCallback? onRetry;
 
   @override
@@ -264,6 +290,17 @@ class _CatalogMessage extends StatelessWidget {
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(detail, textAlign: TextAlign.center),
+            if (technical != null) ...[
+              const SizedBox(height: 12),
+              SelectableText(
+                technical!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
             if (onRetry != null) ...[
               const SizedBox(height: 20),
               FilledButton.icon(
