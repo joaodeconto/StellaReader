@@ -5,10 +5,13 @@
         android:label="StellaReader"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- launchMode is singleTask so a share from another app reaches the
+             running instance through onNewIntent, instead of starting a second
+             copy of the reader inside the sending app's task. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -21,6 +24,24 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Offer StellaReader in the share sheet for a single book. Only
+                 the two MIME types the reader can open are listed, so it does
+                 not clutter the sheet for everything else. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/pdf"/>
+                <data android:mimeType="application/epub+zip"/>
+            </intent-filter>
+
+            <!-- And for a selection of several books at once. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/pdf"/>
+                <data android:mimeType="application/epub+zip"/>
             </intent-filter>
         </activity>
         <meta-data
