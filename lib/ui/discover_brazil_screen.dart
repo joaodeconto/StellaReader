@@ -50,6 +50,16 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   /// changing the shape of its feed.
   static String _describeError(Object error) {
     if (error is DioException) {
+      // A rejected certificate arrives as an unclassified DioException
+      // wrapping a HandshakeException, so it has to be caught before the
+      // switch below or it reads as a generic connection problem.
+      if (error.type == DioExceptionType.badCertificate ||
+          error.error is HandshakeException) {
+        return 'O certificado de segurança do catálogo SciELO está vencido '
+            'ou inválido, então o aplicativo se recusa a confiar na conexão. '
+            'Isso é um problema no servidor do SciELO e só passa quando eles '
+            'renovarem o certificado.';
+      }
       return switch (error.type) {
         DioExceptionType.connectionError ||
         DioExceptionType.connectionTimeout =>
@@ -67,6 +77,10 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
           'Não foi possível falar com o catálogo SciELO. Se você estiver '
               'usando VPN, tente desligá-la.',
       };
+    }
+    if (error is HandshakeException) {
+      return 'O certificado de segurança do catálogo SciELO está vencido ou '
+          'inválido. O problema é no servidor do SciELO.';
     }
     if (error is FormatException || error is XmlException) {
       return 'O catálogo SciELO respondeu em um formato inesperado.';
