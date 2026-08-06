@@ -76,7 +76,7 @@ const _acquisitionFeed = '''
 <?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom"
       xmlns:dcterms="http://purl.org/dc/terms/">
-  <id>https://opds.livros.scielo.org/opds/</id>
+  <id>https://books.scielo.org/opds/</id>
   <title>SciELO Livros</title>
   <entry>
     <id>urn:uuid:book-1</id>
@@ -115,7 +115,7 @@ const _prefixedAcquisitionFeed = '''
 const _navigationFeed = '''
 <?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <id>https://opds.livros.scielo.org/opds/</id>
+  <id>https://books.scielo.org/opds/</id>
   <title>SciELO Livros</title>
   <entry>
     <id>urn:uuid:nav-new</id>
@@ -176,7 +176,89 @@ String _loopFeed(String target) =>
 </feed>
 ''';
 
+/// The real SciELO Books catalog root, as served by books.scielo.org.
+///
+/// Worth keeping verbatim: it is prefixed Atom rather than the default
+/// namespace, and it is a navigation feed with no book anywhere in it. Either
+/// of those on its own is enough to make a naive reader show an empty
+/// catalog, and this feed has both.
+const _scieloRoot = '''
+<atom:feed xmlns:atom="http://www.w3.org/2005/Atom">
+  <atom:id>http://books.scielo.org/opds/</atom:id>
+  <atom:title>SciELO Books</atom:title>
+  <atom:updated>2026-08-06T12:59:34Z</atom:updated>
+  <atom:author>
+    <atom:name>SciELO Books</atom:name>
+    <atom:uri>http://books.scielo.org</atom:uri>
+    <atom:email>scielo.books@scielo.org</atom:email>
+  </atom:author>
+  <atom:link href="/opds/"
+    type="application/atom+xml;profile=opds-catalog;kind=navigation"
+    rel="start"/>
+  <atom:link href="/opds/"
+    type="application/atom+xml;profile=opds-catalog;kind=navigation"
+    rel="self"/>
+  <atom:entry>
+    <atom:title>New Releases</atom:title>
+    <atom:id>http://books.scielo.org/opds/new</atom:id>
+    <atom:updated>2026-08-06T12:59:34Z</atom:updated>
+    <atom:link href="/opds/new"
+      type="application/atom+xml;profile=opds-catalog;kind=acquisition"
+      rel="http://opds-spec.org/sort/new"/>
+  </atom:entry>
+  <atom:entry>
+    <atom:title>Publishers</atom:title>
+    <atom:id>http://books.scielo.org/opds/publisher</atom:id>
+    <atom:updated>2026-08-06T12:59:34Z</atom:updated>
+    <atom:link href="/opds/publisher"
+      type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+  </atom:entry>
+  <atom:entry>
+    <atom:title>Alphabetical</atom:title>
+    <atom:id>http://books.scielo.org/opds/alpha</atom:id>
+    <atom:updated>2026-08-06T12:59:34Z</atom:updated>
+    <atom:link href="/opds/alpha"
+      type="application/atom+xml;profile=opds-catalog;kind=navigation"/>
+  </atom:entry>
+</atom:feed>
+''';
+
 void main() {
+  group('the real SciELO Books catalog', () {
+    test('reaches the books behind the navigation root', () async {
+      final adapter = _CannedAdapter({
+        '/opds/': _scieloRoot,
+        '/opds/new': _bookFeed('book-1', 'Cidadania no Brasil'),
+        '/opds/publisher': _bookFeed('book-2', 'Gestão universitária'),
+        '/opds/alpha': _bookFeed('book-3', 'A técnica como potência'),
+      });
+
+      final books = await _serviceWith(adapter).loadEpubs();
+
+      expect(
+        books.map((book) => book.title),
+        containsAll(<String>[
+          'Cidadania no Brasil',
+          'Gestão universitária',
+          'A técnica como potência',
+        ]),
+      );
+    });
+
+    test('resolves section links against the catalog host', () async {
+      final adapter = _CannedAdapter({
+        '/opds/': _scieloRoot,
+        '/opds/new': _bookFeed('book-1', 'Cidadania no Brasil'),
+        '/opds/publisher': _bookFeed('book-2', 'Outro'),
+        '/opds/alpha': _bookFeed('book-3', 'Mais um'),
+      });
+
+      await _serviceWith(adapter).loadEpubs();
+
+      expect(adapter.requested, contains('https://books.scielo.org/opds/new'));
+    });
+  });
+
   group('ScieloOpdsService.loadEpubs', () {
     test('reads a default-namespace acquisition feed', () async {
       final books = await _serviceServing(_acquisitionFeed).loadEpubs();
@@ -187,7 +269,7 @@ void main() {
       expect(book.author, 'Carvalho, José Murilo de');
       expect(
         book.epubUrl.toString(),
-        'https://opds.livros.scielo.org/opds/book-1.epub',
+        'https://books.scielo.org/opds/book-1.epub',
       );
       expect(book.pageUrl.toString(), 'https://books.scielo.org/id/abc');
     });

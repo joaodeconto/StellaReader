@@ -13,9 +13,12 @@ import '../domain/catalog_book.dart';
 class ScieloOpdsService {
   ScieloOpdsService({Dio? dio}) : _dio = dio ?? Dio();
 
-  static final Uri catalogUri = Uri.parse(
-    'https://opds.livros.scielo.org/opds/',
-  );
+  /// The catalog root.
+  ///
+  /// Not `opds.livros.scielo.org`, which the app pointed at for a long time:
+  /// that host serves an expired certificate and is not where SciELO
+  /// publishes OPDS. The feed identifies itself as `books.scielo.org/opds/`.
+  static final Uri catalogUri = Uri.parse('https://books.scielo.org/opds/');
 
   /// Ceiling on requests per load, so a catalog that links in circles or
   /// paginates forever cannot spin indefinitely.
