@@ -6,14 +6,23 @@ import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:xml/xml.dart';
 
+import '../app_info.dart';
 import '../data/import_service.dart';
 import '../data/scielo_opds_service.dart';
 import '../domain/catalog_book.dart';
+import '../domain/catalog_feed.dart';
+import 'catalog_error.dart';
 
+/// Browses one OPDS feed: its sections, its books, or both.
+///
+/// The catalog is a tree, so this screen pushes another copy of itself for
+/// each section the reader opens. Nothing is fetched until it is asked for.
 class DiscoverBrazilScreen extends StatefulWidget {
-  const DiscoverBrazilScreen({super.key});
+  const DiscoverBrazilScreen({super.key, this.section});
+
+  /// The section being browsed, or null for the catalog root.
+  final CatalogSection? section;
 
   @override
   State<DiscoverBrazilScreen> createState() => _DiscoverBrazilScreenState();
@@ -24,13 +33,26 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   final _dio = Dio();
   final _search = TextEditingController();
   final Map<String, double?> _downloads = {};
-  late Future<List<CatalogBook>> _catalog;
+
+  /// Pages loaded so far, in order. A feed can be paginated, and the reader
+  /// asks for the next page rather than the app deciding how much of somebody
+  /// else's catalog to pull down.
+  final List<OpdsFeed> _pages = [];
+
+  late Future<void> _loading;
+  bool _loadingMore = false;
+  Object? _error;
   String _query = '';
+
+  /// Bumped on every reload. A pagination request that was in flight when the
+  /// reader refreshed belongs to the previous list, and appending its page to
+  /// the new one would interleave two different loads.
+  int _generation = 0;
 
   @override
   void initState() {
     super.initState();
-    _catalog = _service.loadEpubs();
+    _loading = _loadFirstPage();
   }
 
   @override
@@ -41,33 +63,64 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
     super.dispose();
   }
 
-  void _reload() => setState(() => _catalog = _service.loadEpubs());
-
-  /// Turns a failure into something a reader can act on.
-  ///
-  /// The catalog is somebody else's server, so "it broke" is not enough: the
-  /// fix for being offline is different from the fix for SciELO being down or
-  /// changing the shape of its feed.
-  static String _describeError(Object error) {
-    if (error is DioException) {
-      return switch (error.type) {
-        DioExceptionType.connectionError ||
-        DioExceptionType.connectionTimeout =>
-          'Não foi possível se conectar ao '
-              'catálogo SciELO. Verifique sua conexão.',
-        DioExceptionType.receiveTimeout || DioExceptionType.sendTimeout =>
-          'O catálogo SciELO demorou demais para responder.',
-        DioExceptionType.badResponse =>
-          'O catálogo SciELO respondeu com erro '
-              '${error.response?.statusCode ?? 'desconhecido'}.',
-        _ => 'Não foi possível falar com o catálogo SciELO.',
-      };
+  Future<void> _loadFirstPage() async {
+    final generation = ++_generation;
+    _pages.clear();
+    _error = null;
+    // Any pagination still in flight belongs to the list being replaced, so
+    // the new one starts idle rather than waiting for that request to settle.
+    _loadingMore = false;
+    try {
+      final feed = await _service.loadFeed(widget.section?.uri);
+      if (generation != _generation) return;
+      _pages.add(feed);
+    } catch (error) {
+      if (generation != _generation) return;
+      _error = error;
     }
-    if (error is FormatException || error is XmlException) {
-      return 'O catálogo SciELO respondeu em um formato inesperado.';
-    }
-    return 'Não foi possível carregar o catálogo SciELO.';
   }
+
+  void _reload() => setState(() => _loading = _loadFirstPage());
+
+  Future<void> _loadMore() async {
+    if (_pages.isEmpty || _loadingMore) return;
+    final next = _pages.last.next;
+    if (next == null) return;
+
+    final generation = _generation;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _service.loadFeed(next);
+      // A refresh overtook this request, so these pages are no longer the
+      // ones on screen.
+      if (!mounted || generation != _generation) return;
+      setState(() => _pages.add(page));
+    } catch (error) {
+      if (!mounted || generation != _generation) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(describeCatalogError(error))));
+    } finally {
+      // Only clear the flag if this load still owns it. A refresh already
+      // reset it, and may have started a pagination of its own.
+      if (mounted && generation == _generation) {
+        setState(() => _loadingMore = false);
+      }
+    }
+  }
+
+  List<CatalogBook> get _books => [
+    for (final page in _pages)
+      ...page.books.where((book) => book.matches(_query)),
+  ];
+
+  List<CatalogSection> get _sections => [
+    for (final page in _pages) ...page.sections,
+  ];
+
+  bool get _hasMore => _pages.isNotEmpty && _pages.last.next != null;
+
+  String get _title => widget.section?.title ?? 'EPUBs do Brasil';
 
   Future<void> _download(CatalogBook book) async {
     final url = book.epubUrl;
@@ -86,7 +139,7 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
           receiveTimeout: const Duration(minutes: 4),
           headers: const {
             'Accept': 'application/epub+zip, application/octet-stream;q=0.9',
-            'User-Agent': 'StellaReader/0.4.1',
+            'User-Agent': userAgent,
           },
         ),
         onReceiveProgress: (received, total) {
@@ -125,114 +178,189 @@ class _DiscoverBrazilScreenState extends State<DiscoverBrazilScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('EPUBs do Brasil')),
-      body: FutureBuilder<List<CatalogBook>>(
-        future: _catalog,
+      appBar: AppBar(title: Text(_title)),
+      body: FutureBuilder<void>(
+        future: _loading,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
+          if (_error != null) {
             return _CatalogMessage(
               icon: Icons.cloud_off,
               title: 'Catálogo indisponível',
-              detail: _describeError(snapshot.error!),
+              detail: describeCatalogError(_error!),
+              technical: catalogErrorDetail(_error!),
               onRetry: _reload,
             );
           }
-          final all = snapshot.data ?? const <CatalogBook>[];
-          final books = all.where((book) => book.matches(_query)).toList();
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: SearchBar(
-                  controller: _search,
-                  hintText: 'Buscar título, autor ou editora',
-                  leading: const Icon(Icons.search),
-                  onChanged: (value) => setState(() => _query = value),
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Text('Catálogo EPUB de acesso aberto do SciELO Livros.'),
-              ),
-              if (books.isEmpty)
-                Expanded(
-                  child: all.isEmpty
-                      // The request succeeded and still produced no books, so
-                      // the feed is reachable but has nothing we can download.
-                      ? _CatalogMessage(
-                          icon: Icons.menu_book_outlined,
-                          title: 'Nenhum EPUB no catálogo',
-                          detail:
-                              'O catálogo SciELO respondeu, mas não trouxe '
-                              'nenhum livro em EPUB para baixar.',
-                          onRetry: _reload,
-                        )
-                      : const _CatalogMessage(
-                          icon: Icons.search_off,
-                          title: 'Nada encontrado',
-                          detail: 'Nenhum livro corresponde à sua busca.',
-                        ),
-                )
-              else
-                Expanded(
-                  child: RefreshIndicator(
-                    onRefresh: () async {
-                      _reload();
-                      // The FutureBuilder reports this failure; swallow it
-                      // here so the pull gesture just ends.
-                      await _catalog.catchError((_) => const <CatalogBook>[]);
-                    },
-                    child: ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      itemCount: books.length,
-                      separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (_, index) {
-                        final book = books[index];
-                        final downloading = _downloads.containsKey(book.id);
-                        return ListTile(
-                          leading: const Icon(Icons.auto_stories),
-                          title: Text(book.title),
-                          subtitle: Text(
-                            '${book.author}\n${book.publisher.isEmpty ? book.source : book.publisher} · EPUB',
-                          ),
-                          isThreeLine: true,
-                          onTap: downloading ? null : () => _download(book),
-                          trailing: downloading
-                              ? SizedBox(
-                                  width: 36,
-                                  height: 36,
-                                  child: CircularProgressIndicator(
-                                    value: _downloads[book.id],
-                                  ),
-                                )
-                              : PopupMenuButton<String>(
-                                  onSelected: (value) {
-                                    if (value == 'download') _download(book);
-                                    if (value == 'source') _openSource(book);
-                                  },
-                                  itemBuilder: (_) => const [
-                                    PopupMenuItem(
-                                      value: 'download',
-                                      child: Text('Baixar EPUB'),
-                                    ),
-                                    PopupMenuItem(
-                                      value: 'source',
-                                      child: Text('Abrir fonte'),
-                                    ),
-                                  ],
-                                ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-            ],
-          );
+          return _buildFeed(context);
         },
       ),
+    );
+  }
+
+  Widget _buildFeed(BuildContext context) {
+    final sections = _sections;
+    final books = _books;
+    // Searching filters books, not sections, so it only makes sense where
+    // there are books to filter.
+    final searchable = _pages.any((page) => page.books.isNotEmpty);
+
+    if (sections.isEmpty && books.isEmpty && _query.isEmpty) {
+      return _CatalogMessage(
+        icon: Icons.menu_book_outlined,
+        title: 'Nada por aqui',
+        detail: 'Esta parte do catálogo do SciELO está vazia.',
+        onRetry: _reload,
+      );
+    }
+
+    return Column(
+      children: [
+        if (searchable)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: SearchBar(
+              controller: _search,
+              hintText: 'Buscar nesta lista',
+              leading: const Icon(Icons.search),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () async {
+              _reload();
+              await _loading;
+            },
+            child: books.isEmpty && sections.isEmpty
+                ? ListView(
+                    children: [
+                      const SizedBox(height: 80),
+                      const _SearchMissMessage(),
+                      // The message tells the reader to load more pages, so
+                      // the control that does it has to survive an empty
+                      // search — otherwise the only way forward is to clear
+                      // the query, page ahead, and search again.
+                      if (_hasMore)
+                        _LoadMoreTile(
+                          loading: _loadingMore,
+                          onPressed: _loadMore,
+                        ),
+                    ],
+                  )
+                : ListView.separated(
+                    padding: const EdgeInsets.only(bottom: 24),
+                    itemCount:
+                        sections.length + books.length + (_hasMore ? 1 : 0),
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (context, index) {
+                      if (index < sections.length) {
+                        return _SectionTile(section: sections[index]);
+                      }
+                      final bookIndex = index - sections.length;
+                      if (bookIndex < books.length) {
+                        return _bookTile(books[bookIndex]);
+                      }
+                      return _LoadMoreTile(
+                        loading: _loadingMore,
+                        onPressed: _loadMore,
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _bookTile(CatalogBook book) {
+    final downloading = _downloads.containsKey(book.id);
+    return ListTile(
+      leading: const Icon(Icons.auto_stories),
+      title: Text(book.title),
+      subtitle: Text(
+        '${book.author}\n'
+        '${book.publisher.isEmpty ? book.source : book.publisher} · EPUB',
+      ),
+      isThreeLine: true,
+      onTap: downloading ? null : () => _download(book),
+      trailing: downloading
+          ? SizedBox(
+              width: 36,
+              height: 36,
+              child: CircularProgressIndicator(value: _downloads[book.id]),
+            )
+          : PopupMenuButton<String>(
+              onSelected: (value) {
+                if (value == 'download') _download(book);
+                if (value == 'source') _openSource(book);
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'download', child: Text('Baixar EPUB')),
+                PopupMenuItem(value: 'source', child: Text('Abrir fonte')),
+              ],
+            ),
+    );
+  }
+}
+
+class _SectionTile extends StatelessWidget {
+  const _SectionTile({required this.section});
+
+  final CatalogSection section;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: const Icon(Icons.folder_outlined),
+      title: Text(section.title),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => context.push('/discover-brasil', extra: section),
+    );
+  }
+}
+
+class _LoadMoreTile extends StatelessWidget {
+  const _LoadMoreTile({required this.loading, required this.onPressed});
+
+  final bool loading;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Center(
+        child: loading
+            ? const CircularProgressIndicator()
+            : OutlinedButton.icon(
+                onPressed: onPressed,
+                icon: const Icon(Icons.expand_more),
+                label: const Text('Carregar mais'),
+              ),
+      ),
+    );
+  }
+}
+
+/// Shown when a search matches nothing in the pages loaded so far.
+///
+/// Deliberately not a flat "not found": only the loaded pages were searched,
+/// and the catalog is much larger than that.
+class _SearchMissMessage extends StatelessWidget {
+  const _SearchMissMessage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const _CatalogMessage(
+      icon: Icons.search_off,
+      title: 'Nada encontrado',
+      detail:
+          'Nenhum livro nesta lista corresponde à sua busca. A busca olha '
+          'apenas o que já foi carregado, então tente carregar mais ou '
+          'procurar em outra seção.',
     );
   }
 }
@@ -243,18 +371,23 @@ class _CatalogMessage extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.detail,
+    this.technical,
     this.onRetry,
   });
 
   final IconData icon;
   final String title;
   final String detail;
+  final String? technical;
   final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Padding(
+      // Scrollable because the retry button is last: on a landscape phone, or
+      // with large text scaling, a fixed column would push the one control
+      // that recovers from the error off the bottom of the screen.
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -264,6 +397,17 @@ class _CatalogMessage extends StatelessWidget {
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text(detail, textAlign: TextAlign.center),
+            if (technical != null) ...[
+              const SizedBox(height: 12),
+              SelectableText(
+                technical!,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ],
             if (onRetry != null) ...[
               const SizedBox(height: 20),
               FilledButton.icon(
